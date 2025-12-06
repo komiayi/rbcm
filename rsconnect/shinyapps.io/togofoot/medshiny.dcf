@@ -1,0 +1,10 @@
+name: medshiny
+title:
+username: togofoot
+account: togofoot
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16252701
+bundleId:
+url: https://footinfos.shinyapps.io/medshiny/
+version: 1

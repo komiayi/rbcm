@@ -1,0 +1,10 @@
+name: MEdShiny
+title: MEdShiny
+username: dna-mediation
+account: dna-mediation
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16252713
+bundleId: 11282193
+url: https://dna-mediation.shinyapps.io/MEdShiny/
+version: 1
