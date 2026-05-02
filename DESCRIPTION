@@ -1,0 +1,37 @@
+Package: rbcm
+Title: Regression-Based Methods for Correlated Mediators
+Version: 0.5.0
+Authors@R:
+    person("Komi Roger", "Ayi",
+           email = "[ton_courriel@exemple.com]",
+           role = c("aut", "cre"))
+Description: Application R Shiny implémentant les méthodes paramétriques CC
+    (Constant Correlation) et CNC (Non-Constant Correlation) pour l'analyse
+    de médiation causale en présence de médiateurs corrélés. Développée dans
+    le cadre d'un mémoire de maîtrise en statistique à l'UQAM, avec
+    application aux données de méthylation de l'ADN.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends:
+    R (>= 4.0.0)
+Imports:
+    shiny (>= 1.7.0),
+    shinydashboard,
+    DT,
+    dplyr,
+    tidyr,
+    ggplot2,
+    tseries,
+    readr,
+    mvtnorm,
+    Matrix,
+    MVN,
+    tibble
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+URL: https://github.com/komiayi/rbcm
+BugReports: https://github.com/komiayi/rbcm/issues
+RoxygenNote: 7.2.3

@@ -301,7 +301,7 @@ server <- function(input, output, session) {
   
   output$markdown_ui <- renderUI({
     tagList(
-      includeHTML("chapter_translation.Rhtml"),#chapter_translation.Rhtml #Methodes.html
+      includeHTML("docs/Methods.Rhtml"),#chapter_translation.Rhtml #Methodes.html
       tags$script(HTML("
       setTimeout(function() {
         if (window.MathJax && window.MathJax.Hub) {

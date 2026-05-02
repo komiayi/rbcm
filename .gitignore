@@ -1,4 +1,112 @@
-.Rproj.user
+# R / RStudio
 .Rhistory
+.Rapp.history
 .RData
 .Ruserdata
+.Rproj.user/
+*.Rproj
+.Renviron
+
+# Shiny / hébergement
+rsconnect/
+shiny_bookmarks/
+
+# Sessions et environnement
+.RData
+.Rprofile
+
+# Sorties d'analyses (à versionner manuellement si besoin)
+output/
+results/
+*.log
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Données sensibles (NE JAMAIS COMMIT)
+data/
+*.csv.private
+data/raw/
+data/sensitive/
+*.csv.private
+
+# Documentation compilée (régénérable)
+docs/_book/
+docs/*.html
+!docs/methodes_mathematiques.html
+
+# Cache et temporaire
+*.tmp
+*.cache
+.cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Tests
+tests/testthat/_snaps/
+
+# Packrat / renv (optionnel selon ton workflow)
+packrat/lib*/
+packrat/src/
+renv/library/
+renv/python/
+renv/staging/
+
+
+# ============================================
+# LaTeX (fichiers auxiliaires de compilation)
+# ============================================
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.nav
+*.snm
+*.vrb
+
+# TikZ et auxiliaires graphiques
+*.tikzDictionary
+*.dpth
+*.md5
+*.auxlock
+
+# Fichiers de cache TeX
+*.figlist
+*.makefile
+*.figlist
+*.figf
+auto/
+
+# ============================================
+# RMarkdown / knitr (régénérables)
+# ============================================
+*.utf8.md
+*.knit.md
+*-tikzDictionary
+docs/*_files/
+docs/*_cache/
+*_files/
+*_cache/
+
+# Bookdown / pkgdown
+_book/
+_bookdown_files/
+docs/_book/
+docs/_bookdown_files/
+
+# Quarto
+.quarto/
+_freeze/
