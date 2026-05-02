@@ -2,904 +2,46 @@
 # Install and load the shinydashboard package, which simultaneously loads shiny.
 #install.packages("shinydashboard")
 library(shiny)
+library(bslib)
 library(shinydashboard)
+#library(gt)
 library(DT)
 library(dplyr)
 library(tidyr)
-library(ggplot2)
-library(tseries)  # Pour le test Jarque-Bera
+library(plotly)
+#library(ggplot2)
+#library(tseries)
 library(readr)
-library(mvtnorm)
-library(Matrix)
-library(MVN)
+#library(MVN)
 #########################
 
-
-tableau_html <- function(data, data2) {
-  effets <- c("\\(\\zeta\\)", "\\(\\delta\\)")
-  
-  headers <- c(
-    "Effets", "Méthode", "Corrélation estimée",
-    "Valeur estimée", "Écart-type<sup>1</sup>", "95% IC<sup>1</sup>"
-  )
-  
-  headers_html <- sapply(headers, function(h) {
-    words <- unlist(strsplit(h, " "))
-    if (length(words) > 1) {
-      paste(words[1], "<br>", paste(words[-1], collapse = " "), sep = "")
-    } else {
-      h
-    }
-  })
-  
-  html <- '
-  <style>
-    table.custom-table {
-      margin: auto;
-      border-collapse: collapse;
-      font-family: Arial, sans-serif;
-      font-size: 14px;
-      width: 80%;
-      border: none;
-    }
-    .custom-table th,
-    .custom-table td {
-      text-align: center;
-      vertical-align: middle;
-      padding: 8px 12px;
-      border: none;
-    }
-    .custom-table thead th {
-      border-bottom: 2px solid #999999;
-      background-color: #f2f2f2;
-    }
-    .custom-table tbody tr:nth-child(even) td {
-      background-color: #f9f9f9;
-    }
-    /* Enlever les lignes horizontales sauf celle avant les résultats de data2 */
-    .custom-table tbody tr:not(:first-child):not(:nth-child(3)) td {
-      border-bottom: none;
-    }
-    .custom-table tbody tr:nth-child(3) td {
-      border-bottom: 1px solid #dddddd; /* Ligne horizontale avant les résultats de data2 */
-    }
-    .custom-table tbody tr:first-child td {
-      border-bottom: none;
-    }
-    .custom-table tbody tr:last-child td {
-      border-bottom: none;
-    }
-  </style>
-
-  <table class="custom-table">
-    <thead>
-      <tr>'
-  
-  for (h in headers_html) {
-    html <- paste0(html, '<th>', h, '</th>')
-  }
-  
-  html <- paste0(html, '</tr>
-    </thead>
-    <tbody>')
-  
-  # Première méthode : CC
-  for (i in seq_along(effets)) {
-    html <- paste0(html, '<tr><td>', effets[i], '</td>')
-    if (i == 1) {
-      html <- paste0(html,
-                     '<td rowspan="2" style="vertical-align:middle;">\\(\\texttt{CC}\\)</td>')
-    }
-    html <- paste0(html, '<td>', "", '</td>')
-    html <- paste0(html, '<td>', data[i, "Valeur"], '</td>')
-    html <- paste0(html, '<td>', data[i, "ET"], '</td>')
-    html <- paste0(html, '<td>', data[i, "IC"], '</td></tr>')
-  }
-  
-  # Méthodes CNCm et CNCr
-  effets2 <- c("\\(\\zeta\\)", "\\(\\delta\\)")
-  
-  for (effet in effets2) {
-    sous_data <- data2[data2$Effet == effet, ]
-    n <- nrow(sous_data)
-    
-    for (i in seq_len(n)) {
-      ligne <- sous_data[i, ]
-      
-      if (i == 1) {  # Première ligne => CNCm
-        html <- paste0(html, "<tr><td>", effet, "</td>")
-        html <- paste0(html, '<td >\\(\\texttt{CNCm}\\)</td>')
-      } else {  # Lignes suivantes => CNCr
-        html <- paste0(html, "<tr><td></td>")
-        html <- paste0(html, '<td rowspan="1" style="vertical-align:middle;">\\(\\texttt{CNCr}\\)</td>')
-      }
-      html <- paste0(html,
-                     "<td>", ligne$rho, "</td>",
-                     "<td>", ligne$Valeur, "</td>",
-                     "<td>", ligne$ET, "</td>",
-                     "<td>", ligne$IC, "</td></tr>")
-    }
-  }
-  
-  html <- paste0(html, '</tbody></table>')
-  # Ajouter une ligne fine avant "Bootstrap"
-  html <- paste0(html, '<hr style="border: 0; border-top: 1px solid #ddd;">')
-  
-  # Le texte "Bootstrap" à gauche et une ligne après
-  html <- paste0(html, '<p style="text-align:left; margin-left: 20px;"><sup>1</sup> Bootstrap</p>')
-  html <- paste0(html, '<hr style="border: 0; border-top: 1px solid #ddd;">')
-  
-  # Ajout de MathJax pour rendre le LaTeX
-  html <- paste0(html, '
-  <script type="text/javascript" async
-    src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-MML-AM_CHTML">
-  </script>
-  <script type="text/javascript">
-    MathJax.Hub.Queue(["Typeset", MathJax.Hub]);
-  </script>')
-  
-  return(HTML(html))
+# ---- Chargement des fonctions du projet ----
+# Toutes les fonctions statistiques et utilitaires sont dans le dossier R/
+for (f in list.files("R", pattern = "\\.R$", full.names = TRUE)) {
+  source(f, encoding = "UTF-8")
 }
-
-
 
 
 ##############################################################
-# Définir la fonction de test de normalité
-test_normalite <- function(vos_donnees) {
-  # Sélection du test en fonction de la taille de l'échantillon
-  n <- length(vos_donnees)
-  if (n <= 50) {
-    # Test de Shapiro-Wilk pour les petits échantillons
-    test_shapiro <- shapiro.test(vos_donnees)
-    return(paste("Test de Shapiro-Wilk:\n", capture.output(print(test_shapiro), type = "output"), collapse = "\n"))
-  } else if (n <= 2000) {
-    # Test de Kolmogorov-Smirnov pour les échantillons moyens
-    test_ks <- ks.test(vos_donnees, "pnorm", mean = mean(vos_donnees), sd = sd(vos_donnees))
-    return(print(test_ks))
-  } else {
-    # Test de Jarque-Bera pour les grands échantillons
-    test_jarque <- jarque.bera.test(vos_donnees)
-    return(paste("Test de Jarque-Bera:\n", capture.output(print(test_jarque), type = "output"), collapse = "\n"))
-  }
-}
-
-######################################################################
-
-##################################################################################
-TableCoefficients <- function(J, parmed, pary){
-  Mmodel.m <- rmvnorm(J, mean = c(parmed$Cint,parmed$Csed,parmed$Ccor), sigma = solve(parmed$Chess))
-  Ymodel.y <- rmvnorm(J, mean = pary$C.y, sigma = solve(pary$Chess))
-  return(list(alph = Mmodel.m, beta = Ymodel.y))
-}
-
-
-corCoe <- function(imp_m, treatment,mediators, covariates, outcome, data = NULL){
-  residualsData <- residualsData1 <- residualsData0 <-coeffsData <- NULL
-  formulesList <- list()  # Stocker les formules utilisées
-  
-  # Régression de Y sur les médiateurs, le traitement et les covariables
-  
-  fitY <- lm(as.formula(paste(outcome,paste(c(treatment,mediators,covariates), collapse = "+"),sep="~")), data = data)
-  coeffDataY <- summary(fitY)$coefficients[c(treatment,imp_m),c('Estimate','Pr(>|t|)')]
-  colnames(coeffDataY) <- c('B', "P-value")
-  
-  for(i in seq_along(imp_m)){
-    formules <- as.formula(paste(mediators[i],paste(c(treatment,covariates), collapse = "+"),sep="~"))
-    formulestext <-  deparse(formules)  # Stocker la formule dans la liste
-    
-    if(all(data[,treatment] %in% c(0,1), na.rm = TRUE)){
-      # Ajustement pour x == 1 et x == 0
-      
-      res1 <- lm(formules, data = filter(data, x == 1))$residuals
-      res0 <- lm(formules, data = filter(data, x == 0))$residuals
-      
-      residualsData1 <- cbind(residualsData1, res1)
-      residualsData0 <- cbind(residualsData0, res0)
-    }
-    # Ajustement général sur l’ensemble des données
-    
-    res.fit <- lm(formules, data = data)
-    res.coef <- summary(res.fit)$coefficients[treatment,c('Estimate','Pr(>|t|)')]
-    
-    
-    res.coef <- data.frame(
-      Formula = formulestext, B_treat = res.coef["Estimate"],
-      P_value_treat = res.coef["Pr(>|t|)"],
-      stringsAsFactors = FALSE
-    )
-    
-    coeffsData <- rbind(coeffsData, res.coef)
-    residualsData <- cbind(residualsData, res.fit$residuals)
-  }
-  
-  #colnames(coeffsData) <- c('B', "P-value")
-  rownames(coeffsData) <- NULL
-  
-  # Calcul des corrélations
-  if(all(data[,treatment] %in% c(0,1), na.rm = TRUE)){
-    colnames(residualsData1) <- colnames(residualsData0) <- imp_m
-    CorelationData1 <- cor(residualsData1, method = 'pearson')
-    CorelationData0 <- cor(residualsData0, method = 'pearson')
-  }
-  
-  colnames(residualsData) <- imp_m
-  CorelationData <- cor(residualsData, method = 'pearson')
-  
-  
-  # Retourner les résultats avec les formules utilisées
-  
-  if(all(data[,treatment] %in% c(0,1), na.rm = TRUE)){
-    return(list(coeffs = coeffDataY, 
-                coeffsMed = coeffsData, 
-                CorD = round(CorelationData,3),
-                CorD1 = round(CorelationData1,3),
-                CorD0 = round(CorelationData0,3)))
-  }else{
-    return(list(coeffs = coeffDataY, 
-                coeffsMed = coeffsData, 
-                CorD = round(CorelationData,3)))
-  }
-}
-
-###################################################################
-Applications_simple_effect <- function(par, treat, outcome, mediators, intmed, out_cov=NULL,
-                                       intmed_cov=NULL, sed_cov=NULL, inter=FALSE,
-                                       inter_treat_cov = TRUE, cor_cste=1,data=NULL,
-                                       B=200,rh=0.5, methode = c("delta", "bootstrap"), formula_one3 = NULL){
-  
-  DE1s <- IE1s <- NULL
-  coefs.intmed.all <- coefs.sedmed.all <- coefs.y.all <-   cor_coefs.all <-  NULL
-  
-  rho01.all <- rho10.all <- indi.all <- VarbootDE <- VarbootIE <- NULL
-  
-  DEic <- IEic <- NULL
-  
-  ################################################
-  
-  
-  if(isTRUE(inter)){
-    names_vec <- c( 
-      paste(treat, mediators, sep=":"), 
-      paste(mediators, collapse = ":"), 
-      paste(treat, paste(mediators, collapse = ":"), sep=":"))
-  }else{
-    names_vec <- NULL
-  }
-  
-  if(is.array(data)){
-    J <- dim(data)[3]
-  }else if(is.list(data)){
-    J <- length(data)
-  }else{
-    J <- 1
-  }
-  
-  q1 <- 2 + length(intmed_cov)
-  q2 <- 2 + length(sed_cov)
-  
-  
-  if(isTRUE(inter)){
-    q3 <- 2 + 3*length(mediators)+ length(out_cov)
-  }else{
-    q3 <- 2 + length(mediators) + length(out_cov)
-  }
-  
-  for(i in 1:J){
-    
-    donne.i <- NULL
-    
-    if(is.array(data)){
-      donne.i <- as.data.frame(data[,,i])
-    }else if(is.list(data)){
-      donne.i <- as.data.frame(data[[i]])
-    }else{
-      donne.i <- as.data.frame(data)
-    }
-    
-    
-    Efdi <- calculer_effets(treat = treat, mediators= mediators,intmed = intmed, outcome = outcome,
-                            intmed_cov = intmed_cov, sed_cov=sed_cov, out_cov=out_cov,
-                            inter_treat_cov = inter_treat_cov, cor_cste=cor_cste, inter = inter,
-                            q1 = q1, q2 = q2, names_vec = names_vec, rh =rh, data= donne.i,
-                            formula_one3 = formula_one3)
-    
-    if(cor_cste==3){
-      if(!is.null(DE1s) && ncol(DE1s) != 6){
-        next
-      }
-    }
-    
-    
-    ## méthode bootstrap 
-    
-    if(methode == "bootstrap"){
-      
-      Efdiboot <- estim.boots(B=B,treat = treat, mediators= mediators,intmed = intmed, outcome = outcome,
-                              intmed_cov = intmed_cov, sed_cov=sed_cov, out_cov=out_cov,
-                              inter_treat_cov = inter_treat_cov, cor_cste=cor_cste, inter = inter,
-                              q1 = q1, q2 = q2, names_vec = names_vec, rh =rh, donne= donne.i, tripl=tripl)
-      
-      # deIC <- c(as.vector(Efdi$sol.i$DE1sk)-1.96*sqrt(Efdiboot$Vde), as.vector(Efdi$sol.i$DE1sk)+1.96*sqrt(Efdiboot$Vde))
-      # ieIC <- c(as.vector(Efdi$sol.i$IE1sk)-1.96*sqrt(Efdiboot$Vie), as.vector(Efdi$sol.i$IE1sk)+1.96*sqrt(Efdiboot$Vie))
-      
-      VarbootDE <- rbind(VarbootDE, Efdiboot$Vde)
-      VarbootIE <- rbind(VarbootIE, Efdiboot$Vie)
-      DEic <- rbind(DEic, Efdiboot$deIC)
-      IEic <- rbind(IEic, Efdiboot$ieIC)
-    }else{
-      VarbootDE <- VarbootIE <- DEic <- IEic <- NA
-    }
-    ################### Effets ##########################
-    
-    DE1s <- rbind(DE1s, as.vector(Efdi$sol.i$DE1sk))
-    IE1s <- rbind(IE1s, as.vector(Efdi$sol.i$IE1sk))
-    
-    ##################################
-    
-    coefs.intmed.all <- rbind(coefs.intmed.all, Efdi$Cint)
-    coefs.sedmed.all <- rbind(coefs.sedmed.all, Efdi$Csed)
-    coefs.y.all <-rbind(coefs.y.all, Efdi$C.y)
-    cor_coefs.all <- rbind(cor_coefs.all, Efdi$Ccor)
-    
-    rho01.all <- rbind(rho01.all,Efdi$var_covar$r01)
-    rho10.all <- rbind(rho10.all,Efdi$var_covar$r10)
-    indi.all[[i]] <-   Efdi$var_covar$indices
-    
-    ####################################################
-    
-    #print(i)
-  }
-  
-  ###########################
-  if(!is.null(DE1s) && ncol(DE1s)>2){
-    snbsol <- ncol(DE1s)-2
-  }else{
-    snbsol <- 1
-  }
-  
-  
-  if(cor_cste == 3){
-    VnamesMed <- c("interM1", paste(treat,1, sep=""), paste(intmed_cov,1, sep=""), 
-                   "interM2", paste(treat,2, sep=""), paste(sed_cov,2, sep=""),"sig11", "sig10",
-                   "sig21", "sig20", "rh11","rh00" )
-    low <- paste0("Low_", 1:(snbsol+2))
-    upo <- paste0("Up_", 1:(snbsol+2))
-    r01names<- paste0("rh01_",1:snbsol)
-    r10names<- paste0("rh10_",1:snbsol)
-    
-    denames <- paste0("De_", c(paste0("racine",1:snbsol),'moyen','fixe'))
-    ienames <- paste0("Ie_", c(paste0("racine",1:snbsol),'moyen','fixe'))
-    
-    vardenames <- paste0("VarDe_", c(paste0("racine",1:snbsol),'moyen','fixe'))
-    varienames <- paste0("VarIe_", c(paste0("racine",1:snbsol),'moyen','fixe'))
-    
-  }else{
-    VnamesMed <- c("interM1", paste(treat,1, sep=""), paste(intmed_cov,1, sep=""),
-                   "interM2", paste(treat,2, sep=""), paste(sed_cov,2, sep=""),"sig1", "sig2", "rh1")
-    low <- paste0("Low_", 1)
-    upo <- paste0("Up_", 1)
-    r01names<- "rh01"
-    r10names<- "rh10"
-    denames <- "De" 
-    ienames <- "Ie"
-    vardenames <- "VarDe"
-    varienames <- "VarIe"
-  }
-  
-  VnamesY <- c("interY", paste(treat,3, sep=""), mediators, paste(out_cov,3, sep=""), names_vec, "sd") 
-  
-  ##############################
-  
-  
-  colnames(coefs.intmed.all) <- VnamesMed[1:q1]
-  colnames(coefs.sedmed.all) <- VnamesMed[(q1+1):(q1+q2)]
-  colnames(cor_coefs.all) <- VnamesMed[-(1:(q1+q2))]
-  colnames(coefs.y.all) <- VnamesY
-  colnames(rho01.all) <- r01names
-  colnames(rho10.all) <- r10names
-  
-  colnames(DE1s) <- denames
-  colnames(IE1s) <- ienames
-  
-  if(methode == "bootstrap"){
-    colnames(DEic) <- colnames(IEic) <- c(low, upo)
-    colnames(VarbootDE) <- vardenames
-    colnames(VarbootIE) <- varienames
-  }
-  
-  
-  return(list(IndEff = IE1s, DirEff = DE1s, coefm1 = coefs.intmed.all, 
-              coefm2 = coefs.sedmed.all, coefy = coefs.y.all, corcoef = cor_coefs.all,
-              rho01 = rho01.all, rho10 = rho10.all, Indir01 = indi.all, 
-              VarbootDE = VarbootDE, VarbootIE= VarbootIE, DEIC = DEic, IEIC = IEic))
-}
-
-#############################################
-
-
-############################################
-varcovar.estimes <- function(cor_coefs, cor_cste=3){
-  
-  if(cor_cste==3){
-    Delta1 <- NULL; Delt <- NULL; Delta3 <- NULL
-    
-    Delta1 <- -(prod(cor_coefs[c(1,3,5)])^2+prod(cor_coefs[c(2,4,6)])^2)+
-      ((cor_coefs[1])^2-(cor_coefs[2])^2)*((cor_coefs[3])^2-(cor_coefs[4])^2)
-    Delt <- (Delta1)^2 - 4*prod(cor_coefs)^2
-    
-    Delta3 <- 0.5*(-Delta1 + c(sqrt(ifelse(Delt>0,Delt,0)), -sqrt(ifelse(Delt>0,Delt,0))))/(prod(cor_coefs[c(2,3)])^2)
-    Delta3 <- Delta3[which(Delta3>=0)]
-    r01 <- c(sqrt(Delta3),-sqrt(Delta3))
-    indices <- which((r01^2 - cor_coefs[6]^2)*(r01^2 - cor_coefs[5]^2) <= 0)
-    if(length(indices) > 0) {
-      r01 <- r01[indices]
-    }
-    r10 <- prod(cor_coefs[c(5,6)])/r01
-  }else{
-    r01 <- cor_coefs[3]
-    r10 <- r01
-    indices <- 1
-  }
-  return(list(r01 = r01, r10 = r10, indices=indices))
-}
-
-###################################################################################
-varcovarEstimes <- function(cor_coefs, cor_cste = 3){
-  
-  if(cor_cste == 3){
-    Delta1 <- NULL
-    Delt <- NULL
-    Delta3 <- NULL
-    
-    # Calcul de Delta1
-    Delta1 <- -(prod(cor_coefs[c(1, 3, 5)])^2 + prod(cor_coefs[c(2, 4, 6)])^2) +
-      ((cor_coefs[1])^2 - (cor_coefs[2])^2) * ((cor_coefs[3])^2 - (cor_coefs[4])^2)
-    
-    # Calcul de Delt
-    Delt <- (Delta1)^2 - 4 * prod(cor_coefs)^2
-    
-    # Vérification si Delt est négatif
-    if(Delt < 0 || is.na(Delt)){
-      return(list(r01 = NA, r10 = NA, indices = NA))  # Retourner directement si Delt < 0
-    } else {
-      Delta3 <- 0.5 * (-Delta1 + c(sqrt(Delt), -sqrt(Delt))) / (prod(cor_coefs[c(2, 3)])^2)
-      # Remplacer les éléments de Delta3 < 0 par NA
-      Delta3[Delta3 < 0] <- NA
-      
-      # Si Delta3 contient des valeurs valides, calculer r01
-      
-      r01 <- c(sqrt(Delta3), -sqrt(Delta3))  # Calcul de r01 avec le premier élément de Delta3 valide
-      
-      
-      # Vérification de la validité de r01
-      indices <- which((r01^2 - cor_coefs[6]^2) * (r01^2 - cor_coefs[5]^2) <= 0)
-      # if(length(indices) > 0) {
-      #   r01 <- r01[indices]
-      # }
-      
-      # Calcul de r10
-      r10 <- prod(cor_coefs[c(5, 6)]) / r01
-    }
-    
-  } else {
-    # Cas où cor_cste n'est pas égal à 3
-    r01 <- cor_coefs[3]
-    r10 <- r01
-    indices <- 1
-  }
-  
-  return(list(r01 = r01, r10 = r10, indices = indices))
-}
-
-
-##################### outcome loglik ############################################
-
-Matr_Design <- function(inter_vec, data = NULL){
-  # Calcul des interactions basées sur names_vec
-  for (term in inter_vec) {
-    # Séparer les variables de l'interaction
-    variables <- strsplit(term, ":")[[1]]
-    
-    # Calculer l'interaction et ajouter à data
-    interaction_result <- 1
-    for (var in variables) {
-      interaction_result <- interaction_result * data[[var]]
-    }
-    
-    # Ajouter la nouvelle colonne d'interaction
-    data[[term]] <- interaction_result
-  }
-  
-  der <- data[inter_vec]
-  colnames(der) <- inter_vec
-  # Afficher les données avec les nouvelles colonnes d'interaction
-  return(der)
-}
-
-
-
-##################### estiamtions des paramètres médiateurs ####################
-
-
-
-
-##################################################################################
-
-
-calculer_effets <- function(treat, mediators, intmed, outcome, intmed_cov, sed_cov, 
-                            out_cov, inter_treat_cov, cor_cste, data= NULL, q1, 
-                            q2, inter, names_vec, rh, formula_one3){
-  
-  # Initialisation des paramètres
-  parinit <- initialParams(treat = treat, mediators = mediators, intmed = intmed, outcome = outcome,
-                           intmed_cov = intmed_cov, sed_cov = sed_cov, out_cov = out_cov,
-                           inter_treat_cov = inter_treat_cov, cor_cste = cor_cste, data = data,
-                           formula_one3 = formula_one3, names_vec = names_vec)
-  
-  # # # Estimation des paramètres des médiateurs
-  
-  coefs.intmed <- as.vector(parinit$med[1:q1])
-  coefs.sedmed <- as.vector(parinit$med[(q1+1):(q1+q2)])
-  cor_coefs <- as.vector(parinit$med[-c(1:(q1+q2))])
-  
-  # Création de la matrice des coefficients
-  coef <- data.frame(matrix(c(coefs.intmed, coefs.sedmed), 2, q1, byrow = TRUE), mediators)
-  colnames(coef) <- c("inter", treat, intmed_cov, "name")
-  
-  # Estimation des paramètres pour Y
-  
-  coefs.y <- parinit$outc
-  
-  # Création du tableau des coefficients de Y
-  if (isTRUE(inter)) {
-    Bet <- data.frame(Beta = coefs.y, name = c("inter", treat, mediators, out_cov, names_vec, "sd"))
-  } else {
-    Bet <- data.frame(Beta = coefs.y, name = c("inter", treat, mediators, out_cov, "sd"))
-  }
-  
-  # Calcul des covariances et corrélations
-  var_covar <- varcovarEstimes(cor_coefs, cor_cste = cor_cste)
-  
-  if (cor_cste == 1) {
-    r011 <- as.vector(var_covar$r01)
-    r100 <- as.vector(var_covar$r10)
-  } else {
-    r011 <- c(as.vector(var_covar$r01), (cor_coefs[5] + cor_coefs[6]) / 2, rh)
-    r100 <- c(as.vector(var_covar$r10), (cor_coefs[5] + cor_coefs[6]) / 2, rh)
-  }
-  
-  # Calcul des effets naturels
-  sol.i <- effectdirectindirct(alpha = coef, beta = Bet, treat = treat, mediators = mediators,
-                               intmed_cov = intmed_cov, sed_cov = sed_cov, inter = inter, ro = r011,
-                               corC = cor_coefs, names_vec = names_vec, cor_cste = cor_cste, data = data)
-  
-  return(list(Cint = coefs.intmed, Csed = coefs.sedmed, Ccor = cor_coefs, C.y = coefs.y,
-              var_covar = var_covar, 
-              sol.i = sol.i))
-}
-
-
-################################### calules varainces bootstrap #################
-
-calculer_effets_bootstrap <- function(treat, mediators, intmed, outcome, intmed_cov, sed_cov, 
-                                      out_cov, inter_treat_cov, cor_cste, data= NULL,
-                                      q1, q2, inter, names_vec, rh, tripl=TRUE){
-  
-  # Initialisation des paramètres
-  parinit <- initialParams(treat = treat, mediators = mediators, intmed = intmed, outcome = outcome,
-                           intmed_cov = intmed_cov, sed_cov = sed_cov, out_cov = out_cov,
-                           inter_treat_cov = inter_treat_cov, cor_cste = cor_cste,
-                           data = data, tripl = tripl)
-  
-  coefs.intmed <- as.vector(parinit$med[1:q1])
-  coefs.sedmed <- as.vector(parinit$med[(q1+1):(q1+q2)])
-  cor_coefs <- as.vector(parinit$med[-c(1:(q1+q2))])
-  
-  # Création de la matrice des coefficients
-  coef <- data.frame(matrix(c(coefs.intmed, coefs.sedmed), 2, q1, byrow = TRUE), mediators)
-  colnames(coef) <- c("inter", treat, intmed_cov, "name")
-  
-  # Estimation des paramètres pour Y
-  
-  coefs.y <- parinit$outc
-  
-  # Création du tableau des coefficients de Y
-  if (isTRUE(inter)) {
-    Bet <- data.frame(Beta = coefs.y, name = c("inter", treat, mediators, out_cov, names_vec, "sd"))
-  } else {
-    Bet <- data.frame(Beta = coefs.y, name = c("inter", treat, mediators, out_cov, "sd"))
-  }
-  
-  # Calcul des covariances et corrélations
-  var_covar <- varcovarEstimes(cor_coefs, cor_cste = cor_cste)
-  
-  if (cor_cste == 1) {
-    r011 <- as.vector(var_covar$r01)
-    r100 <- as.vector(var_covar$r10)
-  } else {
-    r011 <- c(as.vector(var_covar$r01), (cor_coefs[5] + cor_coefs[6]) / 2, rh)
-    r100 <- c(as.vector(var_covar$r10), (cor_coefs[5] + cor_coefs[6]) / 2, rh)
-  }
-  
-  # Calcul des effets naturels
-  sol.i <- effectdirectindirct(alpha = coef, beta = Bet, treat = treat, mediators = mediators,
-                               intmed_cov = intmed_cov, sed_cov = sed_cov, inter = inter, ro = r011,
-                               corC = cor_coefs, names_vec = names_vec, cor_cste = cor_cste, data = data)
-  
-  return(list(sol = sol.i, Vcorr = var_covar$r01))
-}
-
-
-################################################################################
-estim.boots <- function(B, treat, mediators, intmed, outcome, intmed_cov, sed_cov, 
-                        out_cov, inter_treat_cov, cor_cste, donne = NULL, q1, q2, 
-                        inter, names_vec, rh, tripl=TRUE){
-  
-  DE1s.b <- NULL
-  IE1s.b <- NULL
-  B_effectif <- 0
-  
-  
-  while (B_effectif < B){
-    # Tirage bootstrap
-    donne.b <- donne[sample(1:nrow(donne), replace = TRUE),]
-    
-    # Vérifier que treat == 0 et treat == 1 sont présents avec assez d'observations
-    n1 <- sum(donne.b[, treat] == 1)
-    n0 <- sum(donne.b[, treat] == 0)
-    
-    if (n1 > length(intmed_cov) + 1 && n0 > length(sed_cov) + 1 && length(unique(donne.b[, treat])) > 1) {
-      # Calcul des effets naturels
-      sole <- calculer_effets_bootstrap(treat = treat, mediators = mediators, intmed = intmed, outcome = outcome,
-                                        intmed_cov = intmed_cov, sed_cov = sed_cov, out_cov = out_cov,
-                                        inter_treat_cov = inter_treat_cov, cor_cste = cor_cste, inter = inter,
-                                        q1 = q1, q2 = q2, names_vec = names_vec, rh = rh,
-                                        data = donne.b, tripl=tripl)
-      
-      solb <- sole$sol
-      varc <- sole$Vcorr
-      
-      # Vérifier que solb$DE1sk et solb$IE1sk ne contiennent pas de NA et que le nombre de colonnes correspond
-      if (all(!is.na(solb$DE1sk)) && all(!is.na(solb$IE1sk)) && 
-          (is.null(DE1s.b) || ncol(DE1s.b) == length(solb$IE1sk))) { 
-        DE1s.b <- rbind(DE1s.b, matrix(solb$DE1sk, nrow = 1))
-        IE1s.b <- rbind(IE1s.b, matrix(solb$IE1sk, nrow = 1))
-        
-        # Vérifier si nous avons atteint B lignes valides
-        if (nrow(DE1s.b) >= B) {
-          break
-        }
-        
-        # Incrémenter B_effectif en fonction du nombre de lignes valides
-        B_effectif <- nrow(DE1s.b)
-      }
-      print(paste("B", B_effectif))
-    }
-  }
-  
-  # Calcul des variances en prenant en compte les lignes valides uniquement
-  Vde <- ((B-1)/B)*apply(DE1s.b, 2, var, na.rm = TRUE)
-  Vie <- ((B-1)/B)*apply(IE1s.b, 2, var, na.rm = TRUE)
-  
-  ci_lower_DE <- apply(DE1s.b, 2, quantile, probs = 0.025)
-  ci_upper_DE <- apply(DE1s.b, 2, quantile, probs = 0.975)
-  ci_lower_IE <- apply(IE1s.b, 2, quantile, probs = 0.025)
-  ci_upper_IE <- apply(IE1s.b, 2, quantile, probs = 0.975)
-  
-  return(list(Vde = Vde, Vie = Vie, deIC= c( ci_lower_DE, ci_upper_DE),
-              ieIC = c(ci_lower_IE,ci_upper_IE)))
-}
-
-
-
-############################### calcul des effets ##############################
-
-effectdirectindirct <- function(alpha, beta, treat, mediators, intmed_cov, sed_cov,
-                                inter, vcovar, corC, names_vec, cor_cste, ro, data = NULL){
-  
-  alp01 = alpha[alpha$name%in%mediators[1], "inter"]
-  alp02 = alpha[alpha$name%in%mediators[-1], "inter"]
-  alp11 = alpha[alpha$name%in%mediators[1], treat]
-  alp12 = alpha[alpha$name%in%mediators[-1], treat]
-  alp21 = unlist(alpha[alpha$name%in%mediators[1], intmed_cov])
-  alp22 = unlist(alpha[alpha$name%in%mediators[-1], sed_cov])
-  
-  beta0 <- beta[1,"Beta"]
-  beta1 <- beta[beta$name%in%treat,"Beta"]
-  beta21 <- beta[beta$name%in%mediators[1],"Beta"]
-  beta22 <- beta[beta$name%in%mediators[-1],"Beta"]
-  
-  if(isTRUE(inter)){
-    Bt = beta[beta$name%in%names_vec, "Beta"]
-    for (j in seq_along(names_vec)) {
-      assign(paste0("beta3", j), Bt[j])
-    }
-  }else{
-    for (j in 1:4) {
-      assign(paste0("beta3", j), 0)
-    }
-  }
-  
-  DEk <- IEk <- NULL
-  
-  if(cor_cste==3){
-    
-    for(k in seq_along(ro)){
-      
-      termde1 <- beta1
-      termde2 <- alp12*beta22
-      if(is.null(intmed_cov)){
-        termde31 <- alp01
-      }else{
-        termde31 <- alp01 + as.matrix(data[,intmed_cov])%*%alp21
-      }
-      termde3 <- termde31*beta31
-      if(is.null(sed_cov)){
-        termde41 <- alp02 + alp12
-      }else{
-        termde41 <- alp02 + alp12 + as.matrix(data[,sed_cov])%*%alp22
-      }
-      termde4 <- termde41*beta32
-      
-      termde5 <- (alp12*termde31 + prod(corC[c(2,3)])*ro[k] - prod(corC[c(2,4,6)]))*beta33
-      termde6 <-(termde31*termde41 + prod(corC[c(2,3)])*ro[k])*beta34
-      
-      de <- mean(termde1 + termde2 + termde3 + termde4 + termde5 + termde6)
-      
-      termie1 <- alp11*(beta21 + beta31)
-      termie2 <- (alp11*termde41 + prod(corC[c(1,3,5)]) - prod(corC[c(2,3)])*ro[k])*(beta33 + beta34)
-      ie <- mean(termie1 + termie2)
-      
-      DEk <- c(DEk, de)
-      IEk <- c(IEk, ie)
-    }
-    
-  }else{
-    
-    for(k in seq_along(ro)){
-      
-      termde1 <- beta1
-      termde2 <- alp12*beta22
-      if(is.null(intmed_cov)){
-        termde31 <- alp01
-      }else{
-        termde31 <- alp01 + as.matrix(data[,intmed_cov])%*%alp21
-      }
-      termde3 <- termde31*beta31
-      if(is.null(sed_cov)){
-        termde41 <- alp02 + alp12
-      }else{
-        termde41 <- alp02 + alp12 + as.matrix(data[,sed_cov])%*%alp22
-      }
-      termde4 <- termde41*beta32
-      
-      termde5 <- (alp12*termde31)*beta33
-      termde6 <-(termde31*termde41 + prod(corC[c(1,2)])*ro[k])*beta34
-      
-      de <- mean(termde1 + termde2+ termde3+termde4 +termde5+termde6)
-      
-      termie1 <- alp11*(beta21 + beta31)
-      termie2 <- alp11*termde41*(beta33 + beta34)
-      ie <- mean(termie1 + termie2)
-      
-      DEk <- c(DEk, de)
-      IEk <- c(IEk, ie)
-    }
-  }
-  
-  return(list(DE1sk = DEk, IE1sk = IEk))
-}
-
-############################################
-initialParams <- function(treat, mediators,intmed,outcome,intmed_cov, sed_cov, out_cov, 
-                          inter_treat_cov = TRUE, cor_cste=1, data=NULL,
-                          formula_one3=NULL, names_vec = NULL){
-  # initialisation
-  coeffs.model.m1 <- NULL
-  fit.model.m1 <- NULL; formula_two1 <- NULL; formula_one1 <- NULL
-  coeffs.model.m2 <- NULL
-  fit.model.m2 <- NULL; formula_two <- NULL; formula_one <- NULL
-  formula_two2 <- NULL; formula_one2 <- NULL
-  formula_two3 <- NULL
-  ################################################################
-  
-  if(is.null(intmed_cov)){
-    formula_one1 <- treat
-  }else if(isTRUE(inter_treat_cov)){
-    formula_one1 <- paste(treat,intmed_cov, sep = "*")
-  }else{
-    formula_one1 <- paste(c(treat,intmed_cov), collapse = "+")
-  }
-  # regressions
-  formula_two1 <- as.formula(paste(intmed, formula_one1, sep="~"))
-  fit.model.m1 <- lm(formula_two1, data = data)
-  
-  ### M2
-  
-  if(is.null(sed_cov)){
-    formula_one2 <- treat
-  }else if(isTRUE(inter_treat_cov)){
-    formula_one2 <- paste(treat,sed_cov, sep = "*")
-  }else{
-    formula_one2 <- paste(c(treat,sed_cov), collapse = "+")
-  }
-  # regression
-  formula_two2 <- as.formula(paste(mediators[-1], formula_one2, sep="~"))
-  fit.model.m2 <- lm(formula_two2, data = data)
-  ############ Y
-  # regressions
-  formula_two3 <- as.formula(paste(outcome, formula_one3, sep="~"))
-  fit.outcome <- lm(formula_two3, data = data)
-  #########################
-  fitcoef <- fit.outcome$coefficients
-  # Initialiser un vecteur avec des zéros de la même longueur que names_vec
-  result <- setNames(rep(0, length(names_vec)), names_vec)
-  
-  # Remplacer les éléments existants par leurs valeurs dans fitcoef
-  result[names_vec %in% names(fitcoef)] <- fitcoef[names_vec[names_vec %in% names(fitcoef)]]
-  
-  fitcoef <- as.vector(c(fitcoef[1:(2+length(mediators)+length(out_cov))], result))
-  
-  #fitcoef[is.na(fitcoef)]
-  
-  if(cor_cste==3){
-    n1 <- nrow(data[data[,treat]==1,])
-    n2 <- nrow(data[data[,treat]==0,])
-    a11 <- sd(lm(formula_two1, data = data[data[,treat]==1,])$residuals)*sqrt((n1-1)/(n1-1-length(intmed_cov)))
-    a10 <- sd(lm(formula_two1, data = data[data[,treat]==0,])$residuals)*sqrt((n2-1)/(n2-1-length(intmed_cov)))
-    a21 <- sd(lm(formula_two2, data = data[data[,treat]==1,])$residuals)*sqrt((n1-1)/(n1-1-length(sed_cov)))
-    a20 <- sd(lm(formula_two2, data = data[data[,treat]==0,])$residuals)*sqrt((n2-1)/(n2-1-length(sed_cov)))
-    
-    # corrélations
-    
-    r11 <- cor(lm(formula_two1, data = data[data[,treat]==1,])$residuals,
-               lm(formula_two2, data = data[data[,treat]==1,])$residuals)
-    r00 <- cor(lm(formula_two1, data = data[data[,treat]==0,])$residuals,
-               lm(formula_two2, data = data[data[,treat]==0,])$residuals)
-    return(list(med = c(as.vector(fit.model.m1$coefficients),as.vector(fit.model.m2$coefficients), a11,a10,a21,a20,r11,r00),
-                outc = c(fitcoef, sd(fit.outcome$residuals))))
-  }else{
-    a11 <- sd(lm(formula_two1, data = data)$residuals)*sqrt((nrow(data)-1)/(nrow(data)-2-length(sed_cov)))
-    a10 <- a11
-    a21 <- sd(lm(formula_two2, data = data)$residuals)*sqrt((nrow(data)-1)/(nrow(data)-2-length(sed_cov)))
-    a20 <- a21
-    
-    # corrélations
-    
-    r11 <- cor(lm(formula_two1, data = data)$residuals,
-               lm(formula_two2, data = data)$residuals)
-    r00 <- r11
-    return(list(med = c(as.vector(fit.model.m1$coefficients),as.vector(fit.model.m2$coefficients), a11,a21,r11),
-                outc = c(fitcoef,sd(fit.outcome$residuals))))
-  }
-  
-}
-######################################################################
-
-
-
-
-######################
 
 # Set Up UI Components
-header <- dashboardHeader(title = "Rbcm", # Customizable header with title 
-                          titleWidth = 300)  # Adjusted with to make the title fit
-sidebar <- dashboardSidebar(# Sidebar for navigation
-  width = 300,  # Adjust sidebar width
+header <- dashboardHeader(title = "Rbcm", 
+                          titleWidth = 200) 
+
+sidebar <- dashboardSidebar(
+  width = 200,
   sidebarMenu(
-    menuItem("Main Dashboard", tabName = "dashboard", icon = icon("dashboard")),
-    menuItem("Méthodes", tabName = "methods", icon = icon("chart-line")),
+    menuItem("Main Dashboard", tabName = "dashboard", icon = icon("gauge-high")),
+    menuItem("Methodological Framework", tabName = "methods", icon = icon("book-open-reader")),
     
-    # Analyse Descriptive avec sous-menus
-    menuItem("Analyse Descriptive", icon = icon("th"),
-             menuSubItem("Vue d'ensemble", tabName = "overview"),
-             menuSubItem("Résumé statistique", tabName = "stat_summary"),
-             menuSubItem("Graphiques", tabName = "graphs")
+    menuItem("Exploratory Analysis", icon = icon("searchengin"),
+             menuSubItem("General Overview", tabName = "overview", icon = icon("eye")),
+             menuSubItem("Statistical Summaries", tabName = "stat_summary", icon = icon("list-check")),
+             menuSubItem("Visual Diagnostics", tabName = "graphs", icon = icon("chart-pie"))
     ),
     
-    menuItem("Mediation", tabName = "mediate", icon = icon("chart-bar")),
-    menuItem("External Link", href = "https://tilburgsciencehub.com", icon = icon("external-link")),
+    menuItem("Causal mediation", tabName = "mediate", icon = icon("diagram-project")),
+    menuItem("External Link", href = "https://github.com/komiayi/dna_mediation/blob/main/docs/document_final.pdf", icon = icon("external-link")),
     
     # Search Form: For enhanced user interaction
     sidebarSearchForm(textId = "search", buttonId = "searchButton", label = "Search...")
@@ -907,150 +49,291 @@ sidebar <- dashboardSidebar(# Sidebar for navigation
 )
 
 body <- dashboardBody(
-
+  withMathJax(),
+  tags$script(HTML("
+    Shiny.addCustomMessageHandler('mathjax-typeset', function(message) {
+      if (window.MathJax) {
+        MathJax.Hub.Queue(['Typeset', MathJax.Hub]);
+      }
+    });
+  ")),
   tabItems(
     tabItem(tabName = "methods",
-            h2("Méthodes"),
             withMathJax(),
-            # Inclure le fichier Markdown contenant le texte RMarkdown et les formules
             uiOutput("markdown_ui")
     ),
     tabItem(tabName = "overview",
             h2("Descriptive analysis tab content"),
-            
+      
             fluidRow(
-              column(6, fileInput("data_file", "Télécharger un fichier de données (CSV)", 
-                                  accept = c("text/csv", "text/comma-separated-values,text/plain", ".csv", ".RData"))),
-              column(6, textInput("treat", "Exposition")),
-              column(6, textInput("outcome", "Réponse")),
-              column(6, textInput("mediators", "Médiateurs (séparés par des virgules)")),
-              column(6, textInput("intmed", "Médiateur secondaire"))
+              column(6, fileInput("data_file", 
+                                  "Data source acquisition (CSV or RData)", 
+                                  accept = c("text/csv", "text/comma-separated-values,text/plain", ".csv", ".RData")
+                        )
+              ),
+              column(3, 
+                     actionButton("load_data", 
+                                  "Initialize & Process Data", 
+                                  class = "btn-info", style = "width: 100%; margin-bottom: 20px;"
+                     )
+              )
             ),
-            
             fluidRow(
-              column(6, textInput("out_cov", "Covariables de la réponse (séparées par des virgules)")),
-              column(6, textInput("intmed_cov", "Covariables pour le médiateur primaire (séparées par des virgules)")),
-              column(6, textInput("sed_cov", "Covariables pour le médiateur secondaire (séparées par des virgules)")),
-              column(6, numericInput("B", "Nombre de rééchantillonnages (Bootstrap)", value = 20)),
-              column(6, radioButtons("interaction", "Inclure une interaction entre les médiateurs ?", 
-                                     choices = list("TRUE" = TRUE, "FALSE" = FALSE), selected = FALSE)),  # Boolean TRUE/FALSE
-              # Section conditionnelle
+              column(3, selectInput("treat", "Exposure", choices = NULL)),
+              column(3, selectInput("outcome", "Outcome", choices = NULL)),
+              column(3, 
+                     selectInput("mediators", "Mediators", choices = NULL, multiple = TRUE),
+                     tags$small(style = "color: grey;", 
+                                "Please select mediators in order: 1st = Primary, 2nd = Secondary.")
+              )
+            ),
+            br(),
+            fluidRow(
+              column(3, selectInput("out_cov",
+                                    "Outcome covariates",
+                                    choices = NULL, 
+                                    multiple = TRUE)
+              ),
+              column(3, selectInput("intmed_cov", 
+                                    "Primary mediator covariates",
+                                    choices = NULL, 
+                                    multiple = TRUE
+                        )
+              ),
+              column(3, selectInput("sed_cov", 
+                                    "Secondary mediator covariates",
+                                    choices = NULL, 
+                                    multiple = TRUE
+                        )
+              )
+            ),
+            br(),
+            fluidRow(
+              column(3, numericInput("B", "Number of Bootstrap Resamples", value = 20)),
+              column(6, radioButtons("interaction", "Interaction terms in the outcome model ?", 
+                                     choices = list("Yes" = TRUE, "No" = FALSE), selected = FALSE)),
+              
               conditionalPanel(
                 condition = "input.interaction == 'TRUE'",
                 column(12,
-                       checkboxGroupInput("interaction_types", "Choisir les interactions à inclure :",
+                       checkboxGroupInput("interaction_types", "Select interaction terms for the Outcome model:",
                                           choices = c(
-                                            "Exposition*Médiateur primaire" = "treat_m1",
-                                            "Exposition*Médiateur secondaire" = "treat_m2",
-                                            "Médiateur primaire*Médiateur secondaire" = "m1_m2",
-                                            "Exposition*Médiateur primaire*Médiateur secondaire" = "treat_m1_m2"
-                                          ))
+                                            "Exposure \u00D7 Primary Mediator" = "treat_m1",
+                                            "Exposure \u00D7 Secondary Mediator" = "treat_m2",
+                                            "Primary Mediator \u00D7 Secondary Mediator" = "m1_m2",
+                                            "Exposure \u00D7 Primary \u00D7 Secondary Mediator" = "treat_m1_m2"
+                                          )),
+                       tags$small(style = "color: grey;", 
+                                  "Note: These interactions will be included in the regression model where the Outcome is the dependent variable.")
                 )
               )
             ),
             
             fluidRow(
-              column(12, actionButton("run", "Exécuter", class = "btn-primary")),
-              verbatimTextOutput("debug_output")  # Pour afficher les messages de débogage
+              br(),
+              column(12, actionButton("run", "Run", class = "btn-primary")),
+              verbatimTextOutput("debug_output")  
             )
     ),
     tabItem(tabName = "stat_summary",
-            h2("Résumé statistique"),
+            h2("Statistical summary"),
             fluidRow(
-              box(title = "Aperçu des données", width = 12, dataTableOutput("data_table")),
-              box(title = "Aperçu des residus", width = 12, dataTableOutput("residual_table")),
-              box(title = "Statistiques descriptives des variables quantitatives", width = 12, 
+              box(title = "Data preview", width = 12, dataTableOutput("data_table")),
+              box(title = "Residuals preview", width = 12, dataTableOutput("residual_table")),
+              box(title = "Descriptive statistics for quantitative variables", width = 12, 
                   dataTableOutput("summary_stats_quant")),
-              box(title = "Statistiques descriptives des variables qualitatives", width = 12,
+              box(title = "Descriptive statistics for qualitative variables", width = 12,
                   dataTableOutput("summary_stats_qual"))
             )
     ),
     tabItem(tabName = "graphs",
-            h2("Graphiques et tests statistiques"),
+            h2("Data Visualization and statistical hypothesis testing  of residuals "),
             
             fluidRow(
               tabBox(
                 title = "Boxplot",
                 side = "right", height = "450px",
-                selected = "Réponse",
-                tabPanel("Médiateur secondaire", plotOutput("boxplotmedsed")),
-                tabPanel("Médiateur primaire", plotOutput("boxplotmedint")),
-                tabPanel("Réponse", plotOutput("boxplotoutcome"))
-                
+                selected = textOutput("Outcomebox"),
+                tabPanel(textOutput("Outcomebox"), plotlyOutput("boxplotoutcome")),
+                tabPanel(textOutput("Primarymediatorbox"), plotlyOutput("boxplotmedint")),
+                tabPanel(textOutput("Secondarymediatorbox"), plotlyOutput("boxplotmedsed"))
               ),
               tabBox(
-                title = "Histogramme",
+                title = "Histogram",
                 side = "right", height = "450px",
-                selected = "Réponse",
-                tabPanel("Médiateur secondaire", plotOutput("histogrammedsed")),
-                tabPanel("Médiateur primaire", plotOutput("histogrammedint")),
-                tabPanel("Réponse", plotOutput("histogramoutcome"))
-                
+                selected = textOutput("Outcomehist"),
+                tabPanel(textOutput("Outcomehist"), plotlyOutput("histogramoutcome")),
+                tabPanel(textOutput("Primarymediatorhist"), plotlyOutput("histogrammedint")),
+                tabPanel(textOutput("Secondarymediatorhist"), plotlyOutput("histogrammedsed"))
               )
             ),
             
             fluidRow(
               tabBox(
-                title = "QQplot",
+                title = "Normal Q-Q Plot",
                 side = "right", height = "450px",
-                selected = "Réponse",
-                tabPanel("Médiateur secondaire", plotOutput("qqplotmedsed")),
-                tabPanel("Médiateur primaire", plotOutput("qqplotmedint")),
-                tabPanel("Réponse", plotOutput("qqplotoutcome"))
+                selected = textOutput("Outcomeqq"),
+                tabPanel(textOutput("Outcomeqq"), plotlyOutput("qqplotoutcome")),
+                tabPanel(textOutput("Primarymediatorqq"), plotlyOutput("qqplotmedint")),
+                tabPanel(textOutput("Secondarymediatorqq"), plotlyOutput("qqplotmedsed"))
               ),
               tabBox(
-                title = "Test de normalité",
+                title = "Normality test",
                 side = "right", height = "350px",
-                selected = "Réponse",
-                tabPanel("Multivariée", verbatimTextOutput("testmulti")),
-                tabPanel("Univarié (Médiateur secondaire)", verbatimTextOutput("testmedsed")),
-                tabPanel("Univarié (Médiateur primaire)", verbatimTextOutput("testmedint")),
-                tabPanel("Réponse", verbatimTextOutput("testoutcome"))
+                selected = textOutput("Outcomenor"),
+                tabPanel(textOutput("Outcomenorm"), tableOutput("testoutcome")),
+                tabPanel(textOutput("Primarymediatornorm"), tableOutput("testmedint")),
+                tabPanel(textOutput("Secondarymediatornorm"), tableOutput("testmedsed")),
+                tabPanel(textOutput("Multivariatenorm"), tableOutput("testmulti"))
               )
             )
     ),
-    
     tabItem(tabName = "mediate",
-            h2("Résultats Effets de médiation"),
-            
+            div(class = "d-flex justify-content-between align-items-center mb-4",
+                h2(tags$i(class = "fas fa-chart-line me-2"), "Mediations results")
+            ),
             fluidRow(
-              box(title = "", width = 12, 
-                  uiOutput("resultsCC")),
-               box(title = "Corrélation non constante entre les médiateurs", width = 12,
-                   dataTableOutput("resultsCNC"))
+              column(width = 12,
+                     card(
+                       full_screen = TRUE,
+                       card_header(
+                         # Navigation par onglets (Pills pour un look moderne)
+                         navset_card_pill(
+                           id = "mediation_tabs",
+                           nav_panel(
+                             title = "Constant correlation (CC)",
+                             div(class = "p-3",
+                                 hr(),
+                                 layout_column_wrap(
+                                   width = 1/3, 
+                                   heights_equal = "row",
+                                   
+                                   # direct
+                                   card(
+                                     card_header(
+                                       div(class = "d-flex justify-content-center align-items-center",
+                                           tags$b(withMathJax("\\(\\hat{\\rho}(0,1)\\)"))
+                                       )
+                                     ),
+                                     uiOutput("cc_rho")
+                                   ),
+                                   # direct
+                                   card(
+                                     card_header(
+                                       div(class = "d-flex justify-content-center align-items-center",
+                                           tags$b(withMathJax("\\(\\hat{\\zeta}\\) (direct)"))
+                                       )
+                                     ),
+                                     uiOutput("cc_direct_grid")
+                                   ),
+                                   # indirect
+                                   card(
+                                     card_header(
+                                       div(class = "d-flex justify-content-center align-items-center",
+                                           tags$b(withMathJax("\\(\\hat{\\delta}\\) (indirect)"))#,
+                                           #bsicons::bs_icon("info-circle", title = "Each card represents a different correlation (rho) assumption")
+                                       )
+                                     ),
+                                     uiOutput("cc_indirect_grid"),
+                                   )
+                                 )
+                             )
+                           ),
+                           nav_panel(
+                             title = "Non constant correlation (CNC)",
+                             div(class = "p-3",
+                                 hr(),
+                                 layout_column_wrap(
+                                   width = 1/3, 
+                                   heights_equal = "row",
+                                   
+                                   # direct
+                                   card(
+                                     card_header(
+                                       div(class = "d-flex justify-content-center align-items-center",
+                                           tags$b(withMathJax("\\(\\hat{\\rho}(0,1)\\)"))
+                                       )
+                                     ),
+                                     uiOutput("rho")
+                                   ),
+                                   # direct
+                                   card(
+                                     card_header(
+                                       div(class = "d-flex justify-content-center align-items-center",
+                                           tags$b(withMathJax("\\(\\hat{\\zeta}\\) (direct)"))
+                                       )
+                                     ),
+                                     uiOutput("cnc_direct_grid")
+                                   ),
+                                   # indirect
+                                   card(
+                                     card_header(
+                                       div(class = "d-flex justify-content-center align-items-center",
+                                           tags$b(withMathJax("\\(\\hat{\\delta}\\) (indirect)"))#,
+                                           #bsicons::bs_icon("info-circle", title = "Each card represents a different correlation (rho) assumption")
+                                       )
+                                     ),
+                                      uiOutput("cnc_indirect_grid"),
+                                   )
+                                 )
+                             )
+                           )
+                         )
+                       ),
+                       br(),br(),
+                       # Pied de page informatif (Optionnel)
+                       card_footer(
+                         tags$small(class = "text-muted",
+                               "Note : Results are based on bootstrap resampling (B = ", textOutput("current_B", inline = TRUE)," iterations)")
+                       )
+                     )
+              )
             )
     )
   )
 )  # Main body for content
 
 # Assemble UI
-ui <- dashboardPage(header, sidebar, body)  # Combine header, sidebar, and body
-
-
+ui <- dashboardPage(header, sidebar, body)
 
 # Serveur
 server <- function(input, output, session) {
   
   output$markdown_ui <- renderUI({
-    includeHTML("Methodes.html")
-    #tags$iframe(seamless="seamless", src = "Methodes.html", width = "100%", height = "600px")
+    tagList(
+      includeHTML("chapter_translation.Rhtml"),#chapter_translation.Rhtml #Methodes.html
+      tags$script(HTML("
+      setTimeout(function() {
+        if (window.MathJax && window.MathJax.Hub) {
+          MathJax.Hub.Queue(['Typeset', MathJax.Hub]);
+        }
+      }, 100);
+    "))
+    )
   })
   
   # Variable pour stocker les données (persiste pendant la session)
   data <- reactiveVal(NULL)
   
-  # Charger les données lorsque l'utilisateur clique sur "Exécuter"
-  observeEvent(input$run, {
-    req(input$data_file)  # Vérifier qu'un fichier a été téléchargé
+  observeEvent(data(), {
+    cols <- colnames(data())
+    
+    updateSelectInput(session, "treat", choices = cols)
+    updateSelectInput(session, "outcome", choices = cols)
+    updateSelectInput(session, "mediators", choices = cols)
+    updateSelectInput(session, "intmed", choices = c("NULL" = " ", cols))
+    updateSelectInput(session, "out_cov", choices = c("Aucun" = "", cols))
+  })
+  
+  observeEvent(input$load_data, {
+    req(input$data_file)
     ext <- tools::file_ext(input$data_file$name)
     
-    # Message de debug pour vérifier le format du fichier et la réponse
     output$debug_output <- renderPrint({
       paste("Fichier téléchargé :", input$data_file$name, "Extension :", ext)
     })
     
-    # Lecture des données selon l'extension
-    loaded_data <- NULL  # Initialiser la variable de données
+    loaded_data <- NULL  
     
     if (ext == "csv") {
       loaded_data <- tryCatch({
@@ -1062,85 +345,93 @@ server <- function(input, output, session) {
       
     } else if (ext == "RData") {
       tryCatch({
-        load(input$data_file$datapath)  # Charger le fichier RData
-        obj_names <- ls()[1]  # Récupérer les objets dans l'environnement
+        load(input$data_file$datapath)  
+        obj_names <- ls()[1]  
         if (length(obj_names) == 0) {
           stop("Aucun objet trouvé dans le fichier RData.")
         } else if (length(obj_names) == 1) {
-          # Si un seul objet, le charger directement
           loaded_data <- get(obj_names[1])
         } else {
-          # Si plusieurs objets, informer l'utilisateur
           output$debug_output <- renderPrint({
             paste("Le fichier RData contient plusieurs objets :", paste(obj_names, collapse = ", "), 
                   ". Veuillez spécifier lequel utiliser.")
           })
-          return()  # Sortir pour éviter d'essayer de stocker des données non définies
+          return()
         }
       }, error = function(e) {
         output$debug_output <- renderPrint({ paste("Erreur lors du chargement du fichier RData :", e$message) })
       })
     }
     
-    # Conversion en data frame si les données sont une liste ou un tableau
     if (!is.null(loaded_data)) {
       CL <- colnames(loaded_data)
       if (is.array(loaded_data)) {
-        loaded_data <- as.data.frame(loaded_data)  # Convertir un tableau en data frame
+        loaded_data <- as.data.frame(loaded_data)  
         colnames(loaded_data) <- CL
       } else if (is.list(loaded_data)) {
-        loaded_data <- as.data.frame(loaded_data)  # Convertir une liste en data frame
+        loaded_data <- as.data.frame(loaded_data)  
         colnames(loaded_data) <- CL
       }else {
-        loaded_data <- as.data.frame(loaded_data)  # data frame
+        loaded_data <- as.data.frame(loaded_data)  
         colnames(loaded_data) <- CL
       }
       
-      data(loaded_data)  # Stocker les données
+      data(loaded_data)  
     }
     
-    # Vérification des données chargées
     if (!is.null(data())) {
       output$debug_output <- renderPrint({
-        paste("Données chargées avec succès, nombre de lignes :", nrow(data()))
+        paste("Dataset successfully instantiated. Total observations :", nrow(data()))
       })
     } else {
-      output$debug_output <- renderPrint({ "Aucune donnée chargée." })
+      output$debug_output <- renderPrint({cat("Status: No dataset currently residing in memory.")})
     }
   })
   
-  # Afficher un aperçu des données dans l'onglet "Résumé statistique"
-  output$data_table <- renderDataTable({
-    req(data())  # S'assurer que les données existent
-    datatable(data(), options = list(pageLength = 10, scrollX = TRUE, scrollY = "400px"))  # Afficher les premières lignes des données
+  selected_vars_list <- eventReactive(input$run,{
+    req(input$data_file, input$outcome, input$treat)
+    
+    validate(
+      validate(
+        need(length(input$mediators) == 2, 
+             "Please select exactly 2 mediators (Primary and Secondary) to proceed.")
+      )
+    )
+    
+    clean_input <- function(x) {
+      if (is.null(x) || x == "") return(NULL)
+      if (length(x) > 1) return(x)
+      strsplit(x, ",")[[1]] %>% trimws()
+    }
+    
+    list(
+      outcome = input$outcome,
+      exposure = input$treat,
+      mediators = input$mediators,
+      out_cov = clean_input(input$out_cov),
+      intmed_cov = clean_input(input$intmed_cov),
+      sed_cov = clean_input(input$sed_cov),
+      interactions = input$interaction,
+      all = unique(c(input$outcome, input$treat, input$mediators, 
+                     clean_input(input$out_cov), clean_input(input$intmed_cov), 
+                     clean_input(input$sed_cov)))
+    )
   })
-  
-  # Calculer et stocker les résidus dans un data.frame
-  get_residuals_df <- reactive({
+  get_residuals_df <- eventReactive(input$run,{
     req(data())
     
-    # Variables à ajuster
-    outcome <- input$outcome
-    exposure <- input$treat
-    mediators <- if (is.character(input$mediators)) {
-      strsplit(input$mediators, ",")[[1]] %>% trimws()
-    } else {
-      input$mediators
-    }
+    outcome <- selected_vars_list()$outcome
+    exposure <- selected_vars_list()$exposure
+    mediators <- selected_vars_list()$mediators
     
-    # les covariables de la réponse et des médiateurs
-    out_cov_vars <- if (input$out_cov == "") {NULL}else{strsplit(input$out_cov, ",")[[1]] %>% trimws()} 
-    intmed_cov_vars <- if (input$intmed_cov == "") {NULL}else{strsplit(input$intmed_cov, ",")[[1]] %>% trimws()}
-    sed_cov_vars <- if (input$sed_cov == "") {NULL}else{strsplit(input$sed_cov, ",")[[1]] %>% trimws()}
+    out_cov_vars <- selected_vars_list()$out_cov
+    intmed_cov_vars <- selected_vars_list()$intmed_cov
+    sed_cov_vars <- selected_vars_list()$sed_cov
     
-    covariate <- if (is.null(intmed_cov_vars) && is.null(sed_cov_vars)) {
-      NULL  # Si les deux variables sont NULL, retourne NULL
-    } else {
-      unique(c(intmed_cov_vars, sed_cov_vars))  # Sinon, combine les deux ensembles de variables et retire les doublons
-    }
+    covariate <- unique(c(intmed_cov_vars, sed_cov_vars))
     
-    inter <- as.logical(input$interaction)
-    selected_interactions <- input$interaction_types  # vecteur de valeurs ex: c("treat_m1", "m1_m2")
+    inter <- as.logical(selected_vars_list()$interactions)
+    selected_interactions <- input$interaction_types
     interaction_terms <- c()
     
     if (isTRUE(inter) && !is.null(selected_interactions)) {
@@ -1162,10 +453,9 @@ server <- function(input, output, session) {
       lmfor <- paste(c(exposure, mediators, covariate), collapse = " + ")
     }
     
-    # Vérifications
     req(nzchar(outcome), nzchar(exposure), length(mediators) > 0)
     all_vars <- c(outcome, mediators)
-    req(all(all_vars %in% names(data())), exposure %in% names(data()))
+    
     resid_mat <- sapply(all_vars, function(var) {
       if (var == outcome) {
         formula_str <- paste(var, "~", lmfor)
@@ -1173,7 +463,6 @@ server <- function(input, output, session) {
         predictors <- c(exposure, covariate)
         formula_str <- paste(var, "~", paste(predictors, collapse = " + "))
       }
-      
       model <- tryCatch({
         lm(as.formula(formula_str), data = data())
       }, error = function(e) {
@@ -1185,16 +474,15 @@ server <- function(input, output, session) {
       }
       residuals(model)
     })
-    #Récupérer les noms des modèles
-    # model_names <- sapply(all_vars, function(var) {
-    #   predictors <- if (var == outcome) c(exposure, mediators) else exposure
-    #   paste(var, "~", paste(predictors, collapse = " + "))  # Formule du modèle
-    # })
-    # 
-    # Mettre les résidus en data.frame
+    
     resid_df <- as.data.frame(resid_mat)
-    colnames(resid_df) <- all_vars  # nommer les colonnes avec les noms des variables d'origine
+    colnames(resid_df) <- all_vars
     resid_df
+  })
+
+  output$data_table <- renderDataTable({
+    req(data())  
+    datatable(data(), options = list(pageLength = 10, scrollX = TRUE, scrollY = "400px"))  
   })
   
   output$residual_table <- renderDataTable({
@@ -1203,28 +491,13 @@ server <- function(input, output, session) {
     datatable(df, options = list(pageLength = 10, scrollX = TRUE, scrollY = "400px"))
   })
   
-  # Afficher les statistiques descriptives pour les variables quantitatives
   output$summary_stats_quant <- renderDataTable({
-    req(data())
-
-    # Extraire les variables d'intérêt
-    treat_var <- input$treat
-    outcome_var <- input$outcome
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws() # Méditeurs
-
-    # les covariables de la réponse et des médiateurs
-    out_cov_vars <- strsplit(input$out_cov, ",")[[1]]%>% trimws()   # Covariables de la réponse
-    intmed_cov_vars <- strsplit(input$intmed_cov, ",")[[1]] %>% trimws()
-    sed_cov_vars <- strsplit(input$sed_cov, ",")[[1]]%>% trimws()
-
-    # Créer une liste complète des variables d'intérêt
-    selected_vars <- unique(c(treat_var, outcome_var, mediator_vars, out_cov_vars,intmed_cov_vars,sed_cov_vars))
-    selected_vars <- selected_vars[selected_vars != ""]  # Retirer les entrées vides
-
-    # Calcul des statistiques descriptives avec quantiles et valeurs manquantes
-    stats_dplyr <- data() %>%
-      mutate(across(where(is.numeric), ~ if (length(unique(.)) < 4){as.factor(.)}else{.})) %>%
-      summarise_if(is.numeric, list(
+    vars <- selected_vars_list()$all
+    req(length(vars) > 0)
+    
+    stats <- data() %>%
+      select(any_of(vars)) %>%
+      summarise(across(where(is.numeric), list(
         mean = ~mean(., na.rm = TRUE),
         sd = ~sd(., na.rm = TRUE),
         min = ~min(., na.rm = TRUE),
@@ -1233,708 +506,539 @@ server <- function(input, output, session) {
         Q3 = ~quantile(., 0.75, na.rm = TRUE),
         max = ~max(., na.rm = TRUE),
         missing = ~sum(is.na(.))
-      ))
-
-    # Vérifiez que stats_dplyr contient des données avant de tenter de transformer
-    if (ncol(stats_dplyr) == 0) {
-      return(NULL)  # Pas de données à afficher
+      ))) 
+    
+    if (ncol(stats) == 0) {
+      return(NULL) 
     }
-
-    # Réorganiser le tableau pour avoir les variables en lignes et les statistiques en colonnes
-    stats_tidy <- stats_dplyr %>%
+    
+   
+    stats_tidy <- stats %>%
       pivot_longer(cols = everything(), names_to = "variable_statistic", values_to = "value") %>%
       separate(variable_statistic, into = c("variable", "statistic"), sep = "_(?=[^_]+$)", extra = "merge")%>%
       pivot_wider(names_from = statistic, values_from = value)%>%
-      mutate(across(where(is.numeric), ~ round(.x, 5)))  # Arrondir les valeurs numériques à 5 décimales
-
-
-    # # Filtrer pour ne garder que les variables numériques saisis
+      mutate(across(where(is.numeric), ~ round(.x, 5)))  
+    
+    
     stats_filtered <- stats_tidy
-    if(length(selected_vars)!= 0){
+    if(length(vars)!= 0){
       stats_filtered <- stats_tidy %>%
-        mutate(variable = factor(variable, levels = c(selected_vars, unique(variable[!variable %in% selected_vars]))))%>%
+        mutate(variable = factor(variable, levels = c(vars, unique(variable[!variable %in% vars]))))%>%
         arrange(variable)
     }
-    datatable(stats_filtered, options = list(pageLength = 10, scrollX = TRUE, scrollY = "400px"))
+    datatable(stats_tidy, options = list(pageLength = 10, scrollX = TRUE))
   })
-
-  # Afficher les statistiques descriptives pour les variables qualitatives
+  
   output$summary_stats_qual <- renderDataTable({
-    req(data())
-
-    # Extraire les variables d'intérêt
-    treat_var <- input$treat
-    outcome_var <- input$outcome
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws() # Méditeurs
-
-    # les covariables de la réponse et des médiateurs
-    out_cov_vars <- strsplit(input$out_cov, ",")[[1]]%>% trimws()   # Covariables de la réponse
-    intmed_cov_vars <- strsplit(input$intmed_cov, ",")[[1]] %>% trimws()
-    sed_cov_vars <- strsplit(input$sed_cov, ",")[[1]]%>% trimws()
-
-    # Créer une liste complète des variables d'intérêt
-    selected_vars <- unique(c(treat_var, outcome_var, mediator_vars, out_cov_vars,intmed_cov_vars,sed_cov_vars))
-    selected_vars <- selected_vars[selected_vars != ""]  # Retirer les entrées vides
-
-    # Calcul des statistiques descriptives avec quantiles et valeurs manquantes
-    
-    # Sélectionner uniquement les variables qualitatives (caractères, facteurs et facteurs ordonnés)
     
     qualitative_summary <- data() %>%
       mutate(across(where(is.numeric), ~ if (length(unique(.)) < 4){as.factor(.)}else{.})) %>%
       select(where(is.character), where(is.factor), where(is.ordered))
     
-    
-    
-    # Vérifier s'il y a au moins une variable qualitative ou ordinale
     if (ncol(qualitative_summary) == 0) {
-      return(NULL)  # Retourner NULL si aucune variable qualitative ou ordinale n'est présente
+      return(NULL) 
     }
     
-    # Procéder à l'analyse des fréquences
+    
     stats_filtered_quali <- qualitative_summary %>%
-      drop_na() %>%  # Exclure les lignes avec des valeurs manquantes
+      drop_na() %>%  
       pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valeur") %>%
       group_by(Variable, Valeur) %>%
       summarise(
         Frequence = n(),
         .groups = 'drop'
       )%>%
-      group_by(Variable) %>%  # Re-grouper par variable
-      mutate(Pourcentage = round((Frequence / sum(Frequence)) * 100,2)) # Calcul du pourcentage
+      group_by(Variable) %>% 
+      mutate(Pourcentage = round((Frequence / sum(Frequence)) * 100,2)) 
     
     datatable(stats_filtered_quali, options = list(pageLength = 10, scrollX = TRUE, scrollY = "400px"))
   })
-
+  
   ###########################################################
+  render_residual_plotly <- function(type, var_index) {
+    renderPlotly({
+      # 1. Préparation des données
+      res_df <- get_residuals_df()
+      vars <- colnames(res_df)
+      req(length(vars) >= var_index)
+      
+      var_name <- vars[var_index]
+      data_plot <- res_df[[var_name]]
+      df <- data.frame(val = data_plot)
+      
+      # 2. Logique de génération des graphiques
+      if (type == "box") {
+        # --- BOXPLOT INTERACTIF ---
+        p <- plot_ly(df, y = ~val, type = "box", 
+                     name = var_name,
+                     marker = list(color = '#337ab7'),
+                     fillcolor = 'lightblue') %>%
+          layout(yaxis = list(title = "Residual Value"))
+        
+      } else if (type == "hist") {
+        # --- HISTOGRAMME + DENSITÉ ---
+        # Calcul de la densité en amont pour la superposition
+        dens <- density(data_plot)
+        
+        p <- plot_ly(df) %>%
+          add_histogram(x = ~val, name = "Histogram", 
+                        nbinsx = 30, histnorm = "probability density",
+                        marker = list(color = 'lightgray', 
+                                      line = list(color = 'white', width = 1))) %>%
+          add_lines(x = dens$x, y = dens$y, name = "Density", 
+                    line = list(color = 'blue', width = 2)) %>%
+          layout(xaxis = list(title = "Residuals"),
+                 yaxis = list(title = "Density"),
+                 showlegend = FALSE)
+        
+      } else if (type == "qq") {
+        # --- Q-Q PLOT INTERACTIF ---
+        # Calcul des quantiles théoriques
+        probs <- ppoints(length(data_plot))
+        theo_quantiles <- qnorm(probs)
+        sample_quantiles <- sort(data_plot)
+        
+        p <- plot_ly(x = theo_quantiles, y = sample_quantiles, 
+                     type = 'scatter', mode = 'markers',
+                     marker = list(color = '#337ab7', opacity = 0.6),
+                     name = "Residuals") %>%
+          # Ajout de la ligne de référence (Q-Q Line)
+          add_lines(x = theo_quantiles, 
+                    y = theo_quantiles * sd(sample_quantiles) + mean(sample_quantiles),
+                    line = list(color = 'red', width = 2),
+                    name = "Reference") %>%
+          layout(xaxis = list(title = "Theoretical Quantiles"),
+                 yaxis = list(title = "Sample Quantiles"),
+                 showlegend = FALSE)
+      }
+      
+      # 3. Personnalisation finale (Configuration et Layout)
+      p %>% layout(
+        margin = list(t = 40),
+        hovermode = "closest",
+        plot_bgcolor = "#f8f9fa"
+      ) %>% 
+        config(displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "select2d"))
+    })
+  }
+  
   # Boxplot
-  output$boxplotoutcome <- renderPlot({
-    # Extraire les résidus de l'outcome à partir du tableau de résidus
-    residuals_df <- get_residuals_df()
-    
-    # Extraire les résidus spécifiques à l'outcome
-    outcome_resid <- residuals_df[[input$outcome]]
-    
-    # Vérifier que les résidus existent pour l'outcome
-    req(!is.null(outcome_resid), length(outcome_resid) > 0)
-    
-    # Créer le boxplot des résidus de l'outcome
-    boxplot(outcome_resid, main = paste("Boxplot des résidus de", input$outcome),
-            col = "lightblue", border = "black", xlab = input$outcome,
-            width = 5, height = 4)
-  })
-
-  output$boxplotmedint <- renderPlot({
-    residuals_df <- get_residuals_df()
-    
-    
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws()
-    mediator_resid <- residuals_df[[mediator_vars[1]]]  # Récupérer les résidus du premier médiateur
-    # Vérifier que les résidus existent pour le médiateur
-    req(!is.null(mediator_resid), length(mediator_resid) > 0)
-
-    boxplot(mediator_resid, main = paste("Boxplot des résidus du médiateur primaire"),
-            col = "lightgreen", border = "black", xlab = mediator_vars[1],
-            width = 5, height = 4)
-  })
-
-  output$boxplotmedsed <- renderPlot({
-    # Extraire les résidus du médiateur secondaire
-    residuals_df <- get_residuals_df()
-    
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws()
-    mediator_resid <- residuals_df[[mediator_vars[2]]]  # Récupérer les résidus du premier médiateur
-    # Vérifier que les résidus existent pour le médiateur
-    req(!is.null(mediator_resid), length(mediator_resid) > 0)
-    
-    # Créer le boxplot des résidus du médiateur secondaire
-    boxplot(mediator_resid, main = paste("Boxplot des résidus du médiateur secondaire"),
-            col = "lightcoral", border = "black", xlab = mediator_vars[2],
-            width = 5, height = 4)
-  })
-
+  output$boxplotoutcome <- render_residual_plotly ("box", 1)
+  output$boxplotmedint <- render_residual_plotly ("box", 2)
+  output$boxplotmedsed <- render_residual_plotly ("box", 3)
+  
   # Histogram
-  output$histogramoutcome <- renderPlot({
-    residuals_df <- get_residuals_df()
-    
-    # Extraire les résidus spécifiques à l'outcome
-    outcome_resid <- residuals_df[[input$outcome]]
-    
-    # Vérifier que les résidus existent pour l'outcome
-    req(!is.null(outcome_resid), length(outcome_resid) > 0)
-
-    hist(outcome_resid , main = paste("Histogramme de", input$outcome),
-         xlab = input$outcome, breaks = 20, col = "lightgray", freq=FALSE)
-    lines(density(outcome_resid), col = "blue", lwd = 2)
-
-  })
-
-  output$histogrammedint <- renderPlot({
-    residuals_df <- get_residuals_df()
-
-    # Extraire les médiateurs
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws()
-    mediator_resid <- residuals_df[[mediator_vars[1]]]
-    # Vérifier que les résidus existent pour le médiateur
-    req(!is.null(mediator_resid), length(mediator_resid) > 0)
-
-    hist(mediator_resid, main = paste("Histogramme des résidus du médiateur primaire"),
-         xlab = mediator_vars[1], breaks = 20, col = "lightgray", freq=FALSE)
-    lines(density(mediator_resid), col = "blue", lwd = 2)
-  })
-
-  output$histogrammedsed <- renderPlot({
-    residuals_df <- get_residuals_df()
-
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws()
-    mediator_resid <- residuals_df[[mediator_vars[2]]]
-    # Vérifier que les résidus existent pour le médiateur
-    req(!is.null(mediator_resid), length(mediator_resid) > 0)
-    
-
-    hist(mediator_resid, main = paste("Histogramme des résidus du médiateur secondiare"),
-         xlab = mediator_vars[2], breaks = 20, col = "lightgray", freq=FALSE)
-    lines(density(mediator_resid), col = "blue", lwd = 2)
-  })
-
+  output$histogramoutcome <- render_residual_plotly ("hist", 1)
+  output$histogrammedint <- render_residual_plotly ("hist", 2)
+  output$histogrammedsed <- render_residual_plotly ("hist", 3)
+  
   # Quantile
-  output$qqplotoutcome <- renderPlot({
-    residuals_df <- get_residuals_df()
-    
-    # Extraire les résidus spécifiques à l'outcome
-    outcome_resid <- residuals_df[[input$outcome]]
-    
-    # Vérifier que les résidus existent pour l'outcome
-    req(!is.null(outcome_resid), length(outcome_resid) > 0)
-
-    qqnorm(outcome_resid, main = "QQ plot")
-    qqline(outcome_resid, col = "red", lwd = 2)
-
-  })
-
-  output$qqplotmedint <- renderPlot({
-    # Extraire les résidus du médiateur secondaire
-    residuals_df <- get_residuals_df()
-    
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws()
-    mediator_resid <- residuals_df[[mediator_vars[1]]]  # Récupérer les résidus du premier médiateur
-    # Vérifier que les résidus existent pour le médiateur
-    req(!is.null(mediator_resid), length(mediator_resid) > 0)
+  output$qqplotoutcome <- render_residual_plotly ("qq", 1)
+  output$qqplotmedint <- render_residual_plotly ("qq", 2)
+  output$qqplotmedsed <- render_residual_plotly ("qq", 3)
   
-    qqnorm(mediator_resid, main = "QQ plot")
-    qqline(mediator_resid, col = "red", lwd = 2)
-  })
-
-  output$qqplotmedsed <- renderPlot({
-    # Extraire les résidus du médiateur secondaire
-    residuals_df <- get_residuals_df()
-    
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws()
-    mediator_resid <- residuals_df[[mediator_vars[2]]]  # Récupérer les résidus du premier médiateur
-    # Vérifier que les résidus existent pour le médiateur
-    req(!is.null(mediator_resid), length(mediator_resid) > 0)
-  
-    qqnorm(mediator_resid, main = "QQ plot")
-    qqline(mediator_resid, col = "red", lwd = 2)
-
-  })
-
   ##### Test de normalité
+  render_norm_test <- function(var_index) {
+    renderTable({
+      res_df <- get_residuals_df()
+      req(ncol(res_df) >= var_index)
+      test_normalite_clean(res_df[[var_index]])
+    }, striped = TRUE, hover = TRUE, bordered = TRUE)
+  }
+  #
+  output$testoutcome <- render_norm_test(1)
+  output$testmedint <- render_norm_test(2)
+  output$testmedsed <- render_norm_test(3)
+  output$testmulti <- renderTable({
+    # Extraire les résidus du médiateur secondaire
+    residuals_df <- get_residuals_df()
+    
+    mediator_vars <- input$mediators
+    mediator_resid <- residuals_df[,mediator_vars]
+    
+    test_result <- MVN::mvn(mediator_resid, mvn_test = "hz", univariate_test = "SW",
+                       show_new_data = FALSE) 
+    print(test_result$multivariate_normality)
+  }, striped = TRUE, hover = TRUE)
   
-  output$testoutcome <- renderPrint({
-    # Extraire les résidus de l'outcome à partir du tableau de résidus
-    residuals_df <- get_residuals_df()
-    
-    # Extraire les résidus spécifiques à l'outcome
-    outcome_resid <- residuals_df[[input$outcome]]
-    
-    # Vérifier que les résidus existent pour l'outcome
-    req(!is.null(outcome_resid), length(outcome_resid) > 0)
-    
-    test_normalite(outcome_resid)  # Appeler la fonction de test de normalité
-  })
-
-  output$testmedint <- renderPrint({
-    # Extraire les résidus du médiateur secondaire
-    residuals_df <- get_residuals_df()
-    
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws()
-    mediator_resid <- residuals_df[[mediator_vars[1]]]  # Récupérer les résidus du premier médiateur
-    # Vérifier que les résidus existent pour le médiateur
-    req(!is.null(mediator_resid), length(mediator_resid) > 0)
-    
-    test_normalite(mediator_resid)  # Appeler la fonction de test de normalité
-  })
-
-  output$testmedsed <- renderPrint({
-    # Extraire les résidus du médiateur secondaire
-    residuals_df <- get_residuals_df()
-    
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws()
-    mediator_resid <- residuals_df[[mediator_vars[2]]]  # Récupérer les résidus du premier médiateur
-    # Vérifier que les résidus existent pour le médiateur
-    req(!is.null(mediator_resid), length(mediator_resid) > 0)
-    
-    test_normalite(mediator_resid)  # Appeler la fonction de test de normalité
-  })
   
-  output$testmulti <- renderPrint({
-    # Extraire les résidus du médiateur secondaire
-    residuals_df <- get_residuals_df()
-    
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws()
-    mediator_resid <- residuals_df[,mediator_vars]  # Récupérer les résidus du premier médiateur
-    # Vérifier que les résidus existent pour le médiateur
-    #req(!is.null(mediator_resid), length(mediator_resid) > 0)
-   
-    test_result <- mvn(mediator_resid, mvnTest = "hz", univariateTest = "SW")  # Appeler la fonction de test de normalité
-    print(test_result)
-  })
-
+  output$Outcomebox <- renderText({selected_vars_list()$outcome})
+  output$Outcomehist <- renderText({selected_vars_list()$outcome})
+  output$Outcomeqq <- renderText({selected_vars_list()$outcome})
+  output$Outcomenorm <- renderText({selected_vars_list()$outcome})
+  
+  output$Primarymediatorbox <- renderText({selected_vars_list()$mediators[1]})
+  output$Primarymediatorhist <- renderText({selected_vars_list()$mediators[1]})
+  output$Primarymediatorqq <- renderText({selected_vars_list()$mediators[1]})
+  output$Primarymediatornorm <- renderText({selected_vars_list()$mediators[1]})
+  
+  output$Secondarymediatorbox <- renderText({selected_vars_list()$mediators[2]})
+  output$Secondarymediatorhist <- renderText({selected_vars_list()$mediators[2]})
+  output$Secondarymediatorqq <- renderText({selected_vars_list()$mediators[2]})
+  output$Secondarymediatornorm <- renderText({selected_vars_list()$mediators[2]})
+  
+  
+  output$Multivariatenorm <- renderText({selected_vars_list()$mediators})
+  
   ####### Corrélation constante
   
-  resultsCC <- reactive({
-    req(data())
+
+  resultsCC <- eventReactive(input$run, {
+    req(data(), selected_vars_list())
     
-    SolVrai <-tableCCVrai <- var_covarVrai <- NULL
-    # Extraire les variables d'intérêt
-    treat_var <- input$treat
-    outcome_var <- input$outcome
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws() # Méditeurs
-    ###############################
-    inter <- as.logical(input$interaction)
-    selected_interactions <- input$interaction_types  # vecteur de valeurs ex: c("treat_m1", "m1_m2")
-    interaction_terms <- c()
-    
-    if (isTRUE(inter) && !is.null(selected_interactions)) {
-      if ("treat_m1" %in% selected_interactions) {
-        interaction_terms <- c(interaction_terms, paste(treat_var, mediator_vars[1], sep = ":"))
-      }
-      if ("treat_m2" %in% selected_interactions && length(mediator_vars) > 1) {
-        interaction_terms <- c(interaction_terms, paste(treat_var, mediator_vars[2], sep = ":"))
-      }
-      if ("m1_m2" %in% selected_interactions && length(mediator_vars) > 1) {
-        interaction_terms <- c(interaction_terms, paste(mediator_vars[1], mediator_vars[2], sep = ":"))
-      }
-      if ("treat_m1_m2" %in% selected_interactions && length(mediator_vars) > 1) {
-        triple <- paste(treat_var, mediator_vars[1], mediator_vars[2], sep = ":")
-        interaction_terms <- c(interaction_terms, triple)
-      }
-    }
-    ########################################################
-    
-    
+    vars        <- selected_vars_list()
+    treat_var   <- vars$exposure
+    outcome_var <- vars$outcome
+    mediator_vars <- vars$mediators 
+    out_cov_vars  <- vars$out_cov
+    intmed_cov_vars <- vars$intmed_cov
+    sed_cov_vars    <- vars$sed_cov
     
     Br <- input$B
-    # les covariables de la réponse et des médiateurs
-    out_cov_vars <- if (input$out_cov == "") {NULL}else{strsplit(input$out_cov, ",")[[1]] %>% trimws()} 
-    intmed_cov_vars <- if (input$intmed_cov == "") {NULL}else{strsplit(input$intmed_cov, ",")[[1]] %>% trimws()}
-    sed_cov_vars <- if (input$sed_cov == "") {NULL}else{strsplit(input$sed_cov, ",")[[1]] %>% trimws()}
-
-    covariate <- if (is.null(intmed_cov_vars) && is.null(sed_cov_vars)) {
-      NULL  # Si les deux variables sont NULL, retourne NULL
-    } else {
-      unique(c(intmed_cov_vars, sed_cov_vars))  # Sinon, combine les deux ensembles de variables et retire les doublons
-    }
-    inter_treat_cov <- FALSE
-    if(isTRUE(inter)) {
-      lmfor <- paste(c(treat_var, mediator_vars, covariate, interaction_terms), collapse = " + ")
-    }else{
-     lmfor <- paste(c(treat_var, mediator_vars, covariate), collapse ="+")
-    }
-
-    #########################
-    if(isTRUE(inter)){
-      names_vec <- c(
-        paste(treat_var, mediator_vars, sep=":"),
-        paste(mediator_vars, collapse = ":"),
-        paste(treat_var, paste(mediator_vars, collapse = ":"), sep=":"))
-    }else{
-      names_vec <- NULL
-    }
-
+    inter <- as.logical(vars$interactions)
+    selected_interactions <- input$interaction_types
     cor_cste <- 1
     rh <- 0.5
-
-    q1 <- 2 + length(intmed_cov_vars)
-    q2 <- 2 + length(sed_cov_vars)
-
-
-    if(isTRUE(inter)){
-      q3 <- 2 + 3*length(mediator_vars)+ length(out_cov_vars)
-    }else{
-      q3 <- 2 + length(mediator_vars) + length(out_cov_vars)
-    }
-    #######################################
-  
-    tableCC <- initialParams(treat =treat_var, mediators=mediator_vars,intmed = mediator_vars[1],outcome =outcome_var,
-                  intmed_cov=intmed_cov_vars, sed_cov=sed_cov_vars, out_cov=out_cov_vars,
-                  inter_treat_cov = inter_treat_cov, cor_cste=cor_cste, data=data(),
-                  formula_one3=lmfor , names_vec =  names_vec)
-
-
-    # # # # Estimation des paramètres des médiateurs
-
-    coefs.intmed <- as.vector(tableCC$med[1:q1])
-    coefs.sedmed <- as.vector(tableCC$med[(q1+1):(q1+q2)])
-    cor_coefs <- as.vector(tableCC$med[-c(1:(q1+q2))])
-
-    # Création de la matrice des coefficients
-    coef <- data.frame(matrix(c(coefs.intmed, coefs.sedmed), 2, q1, byrow = TRUE), mediator_vars)
-    colnames(coef) <- c("inter", treat_var, intmed_cov_vars, "name")
-
-    # Estimation des paramètres pour Y
-
-    coefs.y <- tableCC$outc
-
-    # Création du tableau des coefficients de Y
-    if (isTRUE(inter)) {
-      Bet <- data.frame(Beta = coefs.y, name = c("inter", treat_var, mediator_vars, out_cov_vars, names_vec, "sd"))
-    } else {
-      Bet <- data.frame(Beta = coefs.y, name = c("inter", treat_var, mediator_vars, out_cov_vars, "sd"))
-    }
-
-    # Calcul des covariances et corrélations
-    var_covar <- varcovarEstimes(cor_coefs, cor_cste = cor_cste)
-
-    if (cor_cste == 1) {
-      r011 <- as.vector(var_covar$r01)
-      r100 <- as.vector(var_covar$r10)
-    } else {
-      r011 <- c(as.vector(var_covar$r01), (cor_coefs[5] + cor_coefs[6]) / 2, rh)
-      r100 <- c(as.vector(var_covar$r10), (cor_coefs[5] + cor_coefs[6]) / 2, rh)
-    }
-
-    # # Calcul des effets naturels
-    sol.i <- effectdirectindirct(alpha = coef, beta = Bet, treat = treat_var, mediators = mediator_vars,
-                                 intmed_cov = intmed_cov_vars, sed_cov = sed_cov_vars, inter = inter, ro = r011,
-                                 corC = cor_coefs, names_vec = names_vec, cor_cste = cor_cste, data = data())
-
-    SolVrai <- c(sol.i$DE1sk,sol.i$IE1sk)
-    tableCCVrai <- tableCC 
-    var_covarVrai <-  var_covar
-    bootstrap_list <- vector("list", Br)
     
-    set.seed(124)
-    b <- 0
-    while (b < Br) {  # Tant qu'on n'a pas B échantillons valides
-
-      sample_data <- data()[sample(1:nrow(data()),
-                                          size = nrow(data()),
-                                          replace = TRUE), ]
-
-      # n1 <- sum(sample_data[, treat_var] == 1)
-      # n0 <- sum(sample_data[, treat_var] == 0)
-      # 
-      # if (n1 > length(intmed_cov_vars) + 1 && n0 > length(sed_cov_vars) + 1 && length(unique(sample_data$x)) > 1) {  # Vérifier la diversité de x
-        b <- b + 1  # Incrémenter seulement si l'échantillon est valide
-        bootstrap_list[[b]] <- sample_data
-      #}
-    }
-    # 
-    SolB <- NULL
-
-    for(j in 1:Br){
-      #######################################
-
-      tableCC <- initialParams(treat =treat_var, mediators=mediator_vars,intmed = mediator_vars[1],outcome =outcome_var,
-                               intmed_cov=intmed_cov_vars, sed_cov=sed_cov_vars, out_cov=out_cov_vars,
-                               inter_treat_cov = inter_treat_cov, cor_cste=cor_cste, data=bootstrap_list[[j]],
-                               formula_one3=lmfor , names_vec =  names_vec)
-
-
-      # # # # Estimation des paramètres des médiateurs
-
-      coefs.intmed <- as.vector(tableCC$med[1:q1])
-      coefs.sedmed <- as.vector(tableCC$med[(q1+1):(q1+q2)])
-      cor_coefs <- as.vector(tableCC$med[-c(1:(q1+q2))])
-
-      # Création de la matrice des coefficients
-      coef <- data.frame(matrix(c(coefs.intmed, coefs.sedmed), 2, q1, byrow = TRUE), mediator_vars)
-      colnames(coef) <- c("inter", treat_var, intmed_cov_vars, "name")
-
-      # Estimation des paramètres pour Y
-
-      coefs.y <- tableCC$outc
-
-      # Création du tableau des coefficients de Y
-      if (isTRUE(inter)) {
-        Bet <- data.frame(Beta = coefs.y, name = c("inter", treat_var, mediator_vars, out_cov_vars, names_vec, "sd"))
-      } else {
-        Bet <- data.frame(Beta = coefs.y, name = c("inter", treat_var, mediator_vars, out_cov_vars, "sd"))
-      }
-
-      # Calcul des covariances et corrélations
-      var_covar <- varcovarEstimes(cor_coefs, cor_cste = cor_cste)
-
-      if (cor_cste == 1) {
-        r011 <- as.vector(var_covar$r01)
-        r100 <- as.vector(var_covar$r10)
-      } else {
-        r011 <- c(as.vector(var_covar$r01), (cor_coefs[5] + cor_coefs[6]) / 2, rh)
-        r100 <- c(as.vector(var_covar$r10), (cor_coefs[5] + cor_coefs[6]) / 2, rh)
-      }
-
-      # # Calcul des effets naturels
-      sol.i <- effectdirectindirct(alpha = coef, beta = Bet, treat = treat_var, mediators = mediator_vars,
-                                   intmed_cov = intmed_cov_vars, sed_cov = sed_cov_vars, inter = inter, ro = r011,
-                                   corC = cor_coefs, names_vec = names_vec, cor_cste = cor_cste, data = bootstrap_list[[j]])
-      SolB <- rbind(SolB, c(sol.i$DE1sk,sol.i$IE1sk))
-    }
-    
-    #SolB <- tt
-    # MedCCinit <- Applications_simple_effect(treat= treat_var, outcome= outcome_var,
-    #                                         mediators= mediator_vars, intmed = mediator_vars[1],
-    #                                         out_cov=out_cov_vars, intmed_cov=intmed_cov_vars,
-    #                                         sed_cov= sed_cov_vars, inter=inter, inter_treat_cov = inter_treat_cov,
-    #                                         cor_cste = 1, B = Br,rh=0.5,
-    #                                         methode = "bootst", data = data(), formula_one3 = lmfor)
-    # 
-    # # MedCCinit$DirEff
-    # # 
-    
-    SolBi <- ((Br-1)/Br)*apply(SolB, 2, var)
-    SolBcant <- apply(SolB, 2, quantile, probs = c(0.025,0.975))
-    tibble::tibble(
-      #Effets = c("Direct", "Indirect"),
-      Valeur = round(SolVrai,2),
-      ET = round(SolBi,2),
-      IC = paste0("[", round(SolBcant[1, ], 2), ", ", round(SolBcant[2, ], 2), "]")
-    )
-    # data <- cbind(round(SolVrai,2), round(SolBi,2), paste0("[", round(SolBcant[1, ], 2), ", ", round(SolBcant[2, ], 2), "]"))
-    # # Convertir en data frame
-    # data <- as.data.frame(data)
-    # 
-    # # Ajouter les noms des colonnes
-    # colnames(data) <- c("Valeur", "ET", "IC")
-    # 
-    # Convertir les valeurs en caractères (au cas où elles seraient numériques)
-    #data$Valeur <- as.character(data$Valeur)
-    #data$ET <- as.character(data$ET)
-    #$IC <- as.character(data$IC)
-    
-    # print(class(data))
-    # prin
-    # str(data)
-    # #colnames(data) <- c("Valeurs", "ET","IC")
-    # #rownames(data) <- c("Direct", "Indirect")
-    # tableau_html(data)  
-    # #datatable(data) 
-    # #datatable(SolBcant, options = list(pageLength = 10, scrollX = TRUE, scrollY = "400px"))
-    #datatable(as.data.frame(t(SolBi)), options = list(pageLength = 10, scrollX = TRUE, scrollY = "400px"))
-  })
-  
-  
-  ############## Corrélation non constante ####################################
-  
-  resultsCNC <- reactive({
-    req(data())
-    
-    SolVrai <-tableCCVrai <- var_covarVrai <- NULL
-    # Extraire les variables d'intérêt
-    treat_var <- input$treat
-    outcome_var <- input$outcome
-    mediator_vars <- strsplit(input$mediators, ",")[[1]] %>% trimws() # Méditeurs
-    ###############################
-    inter <- as.logical(input$interaction)
-    selected_interactions <- input$interaction_types  # vecteur de valeurs ex: c("treat_m1", "m1_m2")
+    covariate <- unique(c(intmed_cov_vars, sed_cov_vars))
     interaction_terms <- c()
+    names_vec <- NULL
     
     if (isTRUE(inter) && !is.null(selected_interactions)) {
-      if ("treat_m1" %in% selected_interactions) {
+      if ("treat_m1" %in% selected_interactions) 
         interaction_terms <- c(interaction_terms, paste(treat_var, mediator_vars[1], sep = ":"))
-      }
-      if ("treat_m2" %in% selected_interactions && length(mediator_vars) > 1) {
+      if ("treat_m2" %in% selected_interactions) 
         interaction_terms <- c(interaction_terms, paste(treat_var, mediator_vars[2], sep = ":"))
-      }
-      if ("m1_m2" %in% selected_interactions && length(mediator_vars) > 1) {
+      if ("m1_m2" %in% selected_interactions) 
         interaction_terms <- c(interaction_terms, paste(mediator_vars[1], mediator_vars[2], sep = ":"))
-      }
-      if ("treat_m1_m2" %in% selected_interactions && length(mediator_vars) > 1) {
-        triple <- paste(treat_var, mediator_vars[1], mediator_vars[2], sep = ":")
-        interaction_terms <- c(interaction_terms, triple)
-      }
+      if ("treat_m1_m2" %in% selected_interactions) 
+        interaction_terms <- c(interaction_terms, paste(treat_var, mediator_vars[1], mediator_vars[2], sep = ":"))
+      
+      lmfor <- paste(c(treat_var, mediator_vars, covariate, interaction_terms), collapse = " + ")
+      names_vec <- c(paste(treat_var, mediator_vars, sep=":"), 
+                     paste(mediator_vars, collapse = ":"), 
+                     paste(treat_var, paste(mediator_vars, collapse = ":"), sep=":"))
+    } else {
+      lmfor <- paste(c(treat_var, mediator_vars, covariate), collapse = " + ")
     }
-    ########################################################
     
+    run_analysis_core <- function(current_data) {
+      tableCC <- initialParams(
+        treat = treat_var, mediators = mediator_vars, intmed = mediator_vars[1],
+        outcome = outcome_var, intmed_cov = intmed_cov_vars, sed_cov = sed_cov_vars, 
+        out_cov = out_cov_vars, inter_treat_cov = FALSE, cor_cste = cor_cste, 
+        data = current_data, formula_one3 = lmfor, names_vec = names_vec
+      )
+      
+      q1 <- 2 + length(intmed_cov_vars)
+      q2 <- 2 + length(sed_cov_vars)
+      
+      coefs_med <- data.frame(
+        matrix(c(tableCC$med[1:q1], tableCC$med[(q1+1):(q1+q2)]), 2, q1, byrow = TRUE), 
+        mediator_vars
+      )
+      colnames(coefs_med) <- c("inter", treat_var, intmed_cov_vars, "name")
+      
+      bet_names <- if(isTRUE(inter)) {
+        c("inter", treat_var, mediator_vars, out_cov_vars, names_vec, "sd")
+      } else {
+        c("inter", treat_var, mediator_vars, out_cov_vars, "sd")
+      }
+      Bet <- data.frame(Beta = tableCC$outc, name = bet_names)
+      
+      cor_coefs <- as.vector(tableCC$med[-c(1:(q1+q2))])
+      var_covar <- varcovarEstimes(cor_coefs, cor_cste = cor_cste)
+      r011 <- as.vector(var_covar$r01) 
+      
+      sol <- effectdirectindirct(
+        alpha = coefs_med, beta = Bet, treat = treat_var, mediators = mediator_vars,
+        intmed_cov = intmed_cov_vars, sed_cov = sed_cov_vars, inter = inter, ro = r011,
+        corC = cor_coefs, names_vec = names_vec, cor_cste = cor_cste, data = current_data
+      )
+      return(c(DE = sol$DE1sk, IE = sol$IE1sk))
+    }
     
+    # 5. Calcul sur les données réelles
+    SolVrai <- run_analysis_core(data())
+    
+    #6. Bootstrap (Vectorisé)
+    set.seed(145)
+    boot_list <- lapply(1:Br, function(i) {
+      sample_data <- data()[sample(nrow(data()), replace = TRUE), ]
+      res_boot <- run_analysis_core(sample_data)$res
+      return(as.numeric(res_boot)) 
+    })
+    
+    SolB <- do.call(rbind, boot_list)
+    
+    # 7. Résultats finaux
+    SolBi <- apply(SolB, 2, var)
+    SolBcant <- apply(SolB, 2, quantile, probs = c(0.025, 0.975))
+    
+    boot_means <- colMeans(SolB, na.rm = TRUE)
+    biais_bootstrap <- boot_means - SolVrai
+    
+    tibble::tibble(
+      Effect = c("Direct Effect", "Indirect Effect"),
+      Estimate = round(SolVrai, 2),
+      StdError = round(sqrt(SolBi), 2),
+      BiasBoost = round(biais_bootstrap,2),
+      `95% CI` = paste0("[", round(SolBcant[1, ], 2), ", ", round(SolBcant[2, ], 2), "]")
+    )
+  })
+  
+  output$table_results_cc <- renderDataTable({
+    df <- resultsCC()
+
+    datatable(df, 
+              caption = "Direct and Indirect Effects via Causal Categorical approach",
+              options = list(dom = 't',
+                             columnDefs = list(list(className = 'dt-center', targets = "_all"))),
+              selection = 'none') %>%
+      formatStyle('Effect', fontWeight = 'bold') 
+  })
+  
+  # # 1. Valeur Effet Direct
+  # output$cc_direct_val <- renderText({
+  #   df <- resultsCC()
+  #   # On récupère l'estimate de la première ligne (ajustez l'index selon votre df)
+  #   round(df$Estimate[1], 3)
+  # })
+  # 
+  # # 2. CI Effet Direct
+  # output$cc_direct_ci <- renderText({
+  #   df <- resultsCC()
+  #   paste("CI 95%:", df$CI[1])
+  # })
+  # 
+  # # 3. Valeur Effet Indirect
+  # output$cc_indirect_val <- renderText({
+  #   df <- resultsCC()
+  #   # On récupère l'estimate de l'effet indirect (ex: ligne 7)
+  #   round(df$Estimate[7], 3)
+  # })
+  # 
+  # # 4. CI Effet Indirect
+  # output$cc_indirect_ci <- renderText({
+  #   df <- resultsCC()
+  #   paste("CI 95%:", df$CI[7])
+  # })
+  
+  
+  resultsCNC <- eventReactive(input$run, {
+    req(data(), selected_vars_list())
+    
+    vars        <- selected_vars_list()
+    treat_var   <- vars$exposure
+    outcome_var <- vars$outcome
+    mediator_vars <- vars$mediators
+    out_cov_vars  <- vars$out_cov
+    intmed_cov_vars <- vars$intmed_cov
+    sed_cov_vars    <- vars$sed_cov
     
     Br <- input$B
-    # les covariables de la réponse et des médiateurs
-    out_cov_vars <- if (input$out_cov == "") {NULL}else{strsplit(input$out_cov, ",")[[1]] %>% trimws()} 
-    intmed_cov_vars <- if (input$intmed_cov == "") {NULL}else{strsplit(input$intmed_cov, ",")[[1]] %>% trimws()}
-    sed_cov_vars <- if (input$sed_cov == "") {NULL}else{strsplit(input$sed_cov, ",")[[1]] %>% trimws()}
-    
-    covariate <- if (is.null(intmed_cov_vars) && is.null(sed_cov_vars)) {
-      NULL  # Si les deux variables sont NULL, retourne NULL
-    } else {
-      unique(c(intmed_cov_vars, sed_cov_vars))  # Sinon, combine les deux ensembles de variables et retire les doublons
-    }
-    inter_treat_cov <- FALSE
-    if(isTRUE(inter)) {
-      lmfor <- paste(c(treat_var, mediator_vars, covariate, interaction_terms), collapse = " + ")
-    }else{
-      lmfor <- paste(c(treat_var, mediator_vars, covariate), collapse ="+")
-    }
-    
-    #########################
-    if(isTRUE(inter)){
-      names_vec <- c(
-        paste(treat_var, mediator_vars, sep=":"),
-        paste(mediator_vars, collapse = ":"),
-        paste(treat_var, paste(mediator_vars, collapse = ":"), sep=":"))
-    }else{
-      names_vec <- NULL
-    }
-    
+    inter <- as.logical(vars$interactions)
+    selected_interactions <- input$interaction_types
     cor_cste <- 3
     rh <- 0.5
     
-    q1 <- 2 + length(intmed_cov_vars)
-    q2 <- 2 + length(sed_cov_vars)
+    covariate <- unique(c(intmed_cov_vars, sed_cov_vars))
+    interaction_terms <- c()
+    names_vec <- NULL
     
-    
-    if(isTRUE(inter)){
-      q3 <- 2 + 3*length(mediator_vars)+ length(out_cov_vars)
-    }else{
-      q3 <- 2 + length(mediator_vars) + length(out_cov_vars)
-    }
-    #######################################
-    
-    tableCNC <- initialParams(treat =treat_var, mediators=mediator_vars,intmed = mediator_vars[1],outcome =outcome_var,
-                             intmed_cov=intmed_cov_vars, sed_cov=sed_cov_vars, out_cov=out_cov_vars,
-                             inter_treat_cov = inter_treat_cov, cor_cste=cor_cste, data=data(),
-                             formula_one3=lmfor , names_vec =  names_vec)
-    
-    
-    # # # # Estimation des paramètres des médiateurs
-    
-    coefs.intmed <- as.vector(tableCNC$med[1:q1])
-    coefs.sedmed <- as.vector(tableCNC$med[(q1+1):(q1+q2)])
-    cor_coefs <- as.vector(tableCNC$med[-c(1:(q1+q2))])
-    
-    # Création de la matrice des coefficients
-    coef <- data.frame(matrix(c(coefs.intmed, coefs.sedmed), 2, q1, byrow = TRUE), mediator_vars)
-    colnames(coef) <- c("inter", treat_var, intmed_cov_vars, "name")
-    
-    # Estimation des paramètres pour Y
-    
-    coefs.y <- tableCNC$outc
-    
-    # Création du tableau des coefficients de Y
     if (isTRUE(inter)) {
-      Bet <- data.frame(Beta = coefs.y, name = c("inter", treat_var, mediator_vars, out_cov_vars, names_vec, "sd"))
-    } else {
-      Bet <- data.frame(Beta = coefs.y, name = c("inter", treat_var, mediator_vars, out_cov_vars, "sd"))
-    }
-    
-    # Calcul des covariances et corrélations
-    var_covar <- varcovarEstimes(cor_coefs, cor_cste = cor_cste)
-    
-    
-    r011 <- c(as.vector(var_covar$r01), (cor_coefs[5] + cor_coefs[6]) / 2, rh)
-    r100 <- c(as.vector(var_covar$r10), (cor_coefs[5] + cor_coefs[6]) / 2, rh)
-    
-    # # Calcul des effets naturels
-    sol.i <- effectdirectindirct(alpha = coef, beta = Bet, treat = treat_var, mediators = mediator_vars,
-                                 intmed_cov = intmed_cov_vars, sed_cov = sed_cov_vars, inter = inter, ro = r011,
-                                 corC = cor_coefs, names_vec = names_vec, cor_cste = 3, data = data())
-    
-    SolVrai <- c(sol.i$DE1sk,sol.i$IE1sk)
-    tableCNCVrai <- tableCNC 
-    var_covarVrai <-  var_covar
-    bootstrap_list <- vector("list", Br)
-    
-    set.seed(145)
-    b <- 0
-    while (b < Br) {  # Tant qu'on n'a pas B échantillons valides
-      
-      sample_data <- data()[sample(1:nrow(data()),
-                                   size = nrow(data()),
-                                   replace = TRUE), ]
-      
-      # n1 <- sum(sample_data[, treat_var] == 1)
-      # n0 <- sum(sample_data[, treat_var] == 0)
-      # 
-      # if (n1 > length(intmed_cov_vars) + 1 && n0 > length(sed_cov_vars) + 1 && length(unique(sample_data$x)) > 1) {  # Vérifier la diversité de x
-      b <- b + 1  # Incrémenter seulement si l'échantillon est valide
-      bootstrap_list[[b]] <- sample_data
-      #}
-    }
-    # 
-    SolB <- NULL
-    
-    for(j in 1:Br){
-      #######################################
-      
-      tableCNCB <- initialParams(treat =treat_var, mediators=mediator_vars,intmed = mediator_vars[1],outcome =outcome_var,
-                               intmed_cov=intmed_cov_vars, sed_cov=sed_cov_vars, out_cov=out_cov_vars,
-                               inter_treat_cov = inter_treat_cov, cor_cste=3, data=bootstrap_list[[j]],
-                               formula_one3=lmfor , names_vec =  names_vec)
-      
-      
-      # # # # Estimation des paramètres des médiateurs
-      
-      coefs.intmedB <- as.vector(tableCNCB$med[1:q1])
-      coefs.sedmedB <- as.vector(tableCNCB$med[(q1+1):(q1+q2)])
-      cor_coefsB <- as.vector(tableCNCB$med[-c(1:(q1+q2))])
-      
-      # Création de la matrice des coefficients
-      coefB <- data.frame(matrix(c(coefs.intmedB, coefs.sedmedB), 2, q1, byrow = TRUE), mediator_vars)
-      colnames(coefB) <- c("inter", treat_var, intmed_cov_vars, "name")
-      
-      # Estimation des paramètres pour Y
-      
-      coefs.yB <- tableCNCB$outc
-      
-      # Création du tableau des coefficients de Y
-      if (isTRUE(inter)) {
-        BetB <- data.frame(Beta = coefs.yB, name = c("inter", treat_var, mediator_vars, out_cov_vars, names_vec, "sd"))
-      } else {
-        BetB <- data.frame(Beta = coefs.yB, name = c("inter", treat_var, mediator_vars, out_cov_vars, "sd"))
+      if (!is.null(selected_interactions)) {
+        if ("treat_m1" %in% selected_interactions) 
+          interaction_terms <- c(interaction_terms, paste(treat_var, mediator_vars[1], sep = ":"))
+        if ("treat_m2" %in% selected_interactions && length(mediator_vars) > 1) 
+          interaction_terms <- c(interaction_terms, paste(treat_var, mediator_vars[2], sep = ":"))
+        if ("m1_m2" %in% selected_interactions && length(mediator_vars) > 1) 
+          interaction_terms <- c(interaction_terms, paste(mediator_vars[1], mediator_vars[2], sep = ":"))
+        if ("treat_m1_m2" %in% selected_interactions && length(mediator_vars) > 1) 
+          interaction_terms <- c(interaction_terms, paste(treat_var, mediator_vars[1], mediator_vars[2], sep = ":"))
       }
       
-      # Calcul des covariances et corrélations
-      var_covarB <- varcovarEstimes(cor_coefsB, cor_cste = cor_cste)
-     
-      r011B <- c(as.vector(var_covarB$r01), (cor_coefsB[5] + cor_coefsB[6]) / 2, rh)
-      r100B <- c(as.vector(var_covarB$r10), (cor_coefsB[5] + cor_coefsB[6]) / 2, rh)
-
-      
-      # # Calcul des effets naturels
-      sol.iB <- effectdirectindirct(alpha = coefB, beta = BetB, treat = treat_var, mediators = mediator_vars,
-                                   intmed_cov = intmed_cov_vars, sed_cov = sed_cov_vars, inter = inter, ro = r011B,
-                                   corC = cor_coefsB, names_vec = names_vec, cor_cste = 3, data = bootstrap_list[[j]])
-      SolB <- rbind(SolB, c(sol.iB$DE1sk,sol.iB$IE1sk))
+      names_vec <- c(
+        paste(treat_var, mediator_vars, sep = ":"), 
+        paste(mediator_vars, collapse = ":"), 
+        paste(treat_var, paste(mediator_vars, collapse = ":"), sep = ":")
+      )
+      lmfor <- paste(c(treat_var, mediator_vars, covariate, interaction_terms), collapse = " + ")
+    } else {
+      lmfor <- paste(c(treat_var, mediator_vars, covariate), collapse = " + ")
     }
     
-    SolBi <- ((Br-1)/Br)*apply(SolB, 2, var, na.rm=TRUE)
-    SolBcant <- apply(SolB, 2, quantile, probs = c(0.025,0.975), na.rm=TRUE)
+    run_analysis_core <- function(current_data) {
+      tableCNC <- initialParams(
+        treat = treat_var, mediators = mediator_vars, intmed = mediator_vars[1],
+        outcome = outcome_var, intmed_cov = intmed_cov_vars, sed_cov = sed_cov_vars, 
+        out_cov = out_cov_vars, inter_treat_cov = FALSE, cor_cste = cor_cste, 
+        data = current_data, formula_one3 = lmfor, names_vec = names_vec
+      )
+      
+      q1 <- 2 + length(intmed_cov_vars)
+      q2 <- 2 + length(sed_cov_vars)
+      
+      coefs_med <- data.frame(
+        matrix(c(tableCNC$med[1:q1], tableCNC$med[(q1+1):(q1+q2)]), 2, q1, byrow = TRUE), 
+        mediator_vars
+      )
+      colnames(coefs_med) <- c("inter", treat_var, intmed_cov_vars, "name")
+      
+      bet_names <- if(isTRUE(inter)) {
+        c("inter", treat_var, mediator_vars, out_cov_vars, names_vec, "sd")
+      } else {
+        c("inter", treat_var, mediator_vars, out_cov_vars, "sd")
+      }
+      Bet <- data.frame(Beta = tableCNC$outc, name = bet_names)
+      
+      cor_coefs <- as.vector(tableCNC$med[-c(1:(q1+q2))])
+      var_covar <- varcovarEstimes(cor_coefs, cor_cste = cor_cste)
+      
+      r011 <- c(as.vector(var_covar$r01), (cor_coefs[5] + cor_coefs[6]) / 2, rh)
+      
+      sol <- effectdirectindirct(
+        alpha = coefs_med, beta = Bet, treat = treat_var, mediators = mediator_vars,
+        intmed_cov = intmed_cov_vars, sed_cov = sed_cov_vars, inter = inter, ro = r011,
+        corC = cor_coefs, names_vec = names_vec, cor_cste = cor_cste, data = current_data
+      )
+
+      return(list(res = c(sol$DE1sk, sol$IE1sk), rho = r011))
+    }
+    
+    vrai_obj <- run_analysis_core(data())
+    SolVrai  <- vrai_obj$res
+    RhosVrai <- vrai_obj$rho
+    
+    set.seed(145)
+    boot_list <- lapply(1:Br, function(i) {
+      sample_data <- data()[sample(nrow(data()), replace = TRUE), ]
+      res_boot <- run_analysis_core(sample_data)$res
+      return(as.numeric(res_boot)) 
+    })
+
+    SolB <- do.call(rbind, boot_list) 
+    
+    SolBi <- apply(SolB, 2, var, na.rm = TRUE)
+    SolBcant <- apply(SolB, 2, quantile, probs = c(0.025, 0.975), na.rm = TRUE)
+    
+    boot_means <- colMeans(SolB, na.rm = TRUE)
+    biais_bootstrap <- boot_means - SolVrai
+    
     dtf <- tibble::tibble(
-      Effet = rep(c("\\(\\zeta\\)", "\\(\\delta\\)"), each = 6),
-      Méthode = rep(c(rep("CNCr", 4), "CNCm", "CNC"), 2),
-      rho = rep(round(r011,2),2),
-      Valeur = round(SolVrai,2),
-      ET = round(SolBi,2),
-      IC = paste0("[", round(SolBcant[1, ], 2), ", ", round(SolBcant[2, ], 2), "]")
+      Effect = rep(c("Direct Effect", "Indirect Effect"), each = 6),
+      Method = rep(c("CNCr1", "CNCr2", "CNCr3", "CNCr4", "CNCm", "CNC"), 2),
+      rho    = rep(round(RhosVrai, 2), 2),
+      Estimate = round(SolVrai, 2),
+    StdError = round(sqrt(SolBi), 2),
+    BiasBoost = round(biais_bootstrap,2),
+    `95% CI` = paste0("[", round(SolBcant[1, ], 2), ", ", round(SolBcant[2, ], 2), "]")
     )
-    dtf_modifié <- dtf %>%
-      slice(c(5,1,2,3,4,11,7,8,9,10))
-    #datatable(dtf_modifié)
+    
+    # Affiche les 6 premières lignes dans la console R pour inspection
+    # Réorganisation des lignes selon votre logique slice(c(5,1,2,3,4,11,7,8,9,10))
+    # Note : Vérifiez bien l'ordre des lignes si vos fonctions retournent plus ou moins d'effets
+    dtf %>% slice(c(5, 1, 2, 3, 4, 11, 7, 8, 9, 10))
+    #dtf
   })
   
-  output$resultsCC <- renderUI({
-    df <- resultsCC()
-    df2 <- resultsCNC()
-    tableau_html(df, df2)
+  output$current_B <- renderText({
+    req(input$B) 
+    input$B
   })
+  
+  
+  render_cnc_boxes <- function(df, effect_name, color_theme) {
+    df_sub <- df[grepl(effect_name, df$Effect), ]
+    
+    layout_column_wrap(
+      width = "250px",
+      fixed_width = TRUE,
+      gap = "1.5rem", 
+      lapply(1:nrow(df_sub), function(i) {
+        is_mean <- df_sub$Method[i] == "CNCm"
+        value_box(
+          title = df_sub$Method[i],
+          value = span(format(round(as.numeric(df_sub$Estimate[i]), 3), nsmall = 2), 
+                       style = "font-size: 4.01rem;"),
+          theme = if(is_mean) color_theme else "light",
+          
+          tags$div(
+            #style = "font-size: 0.85rem; line-height: 1.4;",
+            tags$div(
+              class = "d-flex justify-content-between",
+              style = "font-size: 1.55rem;",
+              tags$span(tags$b("Bias: "), format(df_sub$BiasBoost[i], nsmall = 3),", "),
+              tags$span(tags$b("SE: "), format(df_sub$StdError[i], nsmall = 2)),
+            ),
+            tags$div(
+              style = "font-size: 1.31rem;",
+              tags$b("95% CI: "), df_sub$`95% CI`[i]
+            )
+          )
+        )
+      })
+    )
+  }
+  
+  output$cnc_direct_grid <- renderUI({
+    req(resultsCNC())
+    render_cnc_boxes(resultsCNC(), "Direct", "primary")
+  })
+  
+  output$cnc_indirect_grid <- renderUI({
+    req(resultsCNC())
+    render_cnc_boxes(resultsCNC(), "Indirect", "info") 
+  })
+  
+  render_rho_params <- function(df) {
+    df_sub <- df[df$Effect == "Indirect Effect", ]
+    
+    layout_column_wrap(
+      width = "250px", 
+      fixed_width = TRUE,
+      gap = "1.5rem",
+      
+      lapply(1:nrow(df_sub), function(i) {
+        is_mean <- df_sub$Method[i] == "CNCm"
+        
+        value_box(
+          title = df_sub$Method[i],
+          value = span(format(round(as.numeric(df_sub$rho[i]), 2), nsmall = 2), 
+                       style = "font-size: 3.95rem;"),
+          theme = if(is_mean) "primary" else "secondary",
+          br(),
+          br(),
+          br()
+        )
+      })
+    )
+  }
+ 
+  output$rho <- renderUI({
+    req(resultsCNC())
+    render_rho_params(resultsCNC()) 
+  })
+  
+  
+  output$cc_rho <- renderUI({
+    req(resultsCC())
+    render_rho_params(resultsCC()) 
+  })
+  
+  output$cc_direct_grid <- renderUI({
+    req(resultsCC())
+    render_cc_boxes(resultsCC(), "Direct", "primary")
+  })
+  
+  output$cc_indirect_grid <- renderUI({
+    req(resultsCC())
+    render_cc_boxes(resultsCC(), "Indirect", "info") 
+  })
+  
   
 }
 
 
 # Launch Dashboard
 shinyApp(ui, server)  # Initialize the shinydashboard
-
-
-
-
