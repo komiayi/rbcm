@@ -7,6 +7,18 @@
 *.Rproj
 .Renviron
 
+# RStudio Project (fichier local utilisateur)
+MEdShiny.Rproj
+
+# renv (sauf renv.lock qu'on garde pour reproductibilité)
+renv/library/
+renv/python/
+renv/staging/
+renv/local/
+renv/cellar/
+.Rprofile
+
+
 # Shiny / hébergement
 rsconnect/
 shiny_bookmarks/
