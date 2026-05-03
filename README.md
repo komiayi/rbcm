@@ -93,9 +93,9 @@ Le projet est en développement actif. Les retours, suggestions et issues sont l
 
 ---
 
-## 📝 Licence
+## Licence
 
-[À définir — proposition : MIT ou GPL-3]
+Distribué sous licence MIT. Voir [`LICENSE`](LICENSE) pour les détails complets.
 
 ---
 
