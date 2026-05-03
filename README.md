@@ -20,7 +20,12 @@ Ces méthodes ont été développées dans le cadre de mon mémoire de maîtrise
 L'objectif de cette application est de **rendre ces méthodes accessibles aux chercheurs non-statisticiens** via une interface interactive, sans nécessiter de programmation R avancée.
 
 ---
+## 🔗 Travaux liés
 
+Les méthodes CC et CNC implémentées dans cette application ont été développées 
+et validées dans le cadre du projet de recherche [`dna_mediation`](https://github.com/komiayi/dna_mediation), 
+qui présente l'application des méthodes à un jeu de données réelles 
+(traumatismes infantiles, méthylation de l'ADN, réactivité au cortisol).
 ## ✨ Fonctionnalités actuelles
 
 - 📥 **Importation de données** : support des formats CSV, Excel et fichiers délimités
