@@ -1,88 +1,98 @@
 # rbcm — Regression-Based methods for Correlated Mediators
 
-> **Application R Shiny pour l'analyse de médiation causale en présence de médiateurs corrélés.**
+> An R Shiny application for causal mediation analysis when mediators are **correlated but not causally linked**.
 
-[![Status](https://img.shields.io/badge/status-active%20development-orange)]()
-[![R](https://img.shields.io/badge/R-≥4.0-blue)]()
-[![Shiny](https://img.shields.io/badge/Shiny-app-brightgreen)]()
+[![Status](https://img.shields.io/badge/status-active%20development-orange)](https://github.com/komiayi/rbcm)
+[![R](https://img.shields.io/badge/R-%E2%89%A5%204.0-blue?logo=r&logoColor=white)](https://www.r-project.org/)
+[![Shiny](https://img.shields.io/badge/Shiny-app-brightgreen?logo=rstudioide&logoColor=white)](https://shiny.posit.co/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Last commit](https://img.shields.io/github/last-commit/komiayi/rbcm)
 
----
-![Aperçu de l'application rbcm](docs/screenshot.png)
-## 📖 Description
-
-`rbcm` est une application R Shiny implémentant deux méthodes paramétriques originales pour l'identification des effets de médiation causale lorsque les médiateurs sont corrélés :
-
-- **CC (Constant Correlation)** — méthode adaptée lorsque la structure de corrélation entre médiateurs est stable
-- **CNC (Non-Constant Correlation)** — méthode généralisée pour les structures de corrélation hétérogènes
-
-Ces méthodes ont été développées dans le cadre de mon mémoire de maîtrise en statistique à l'UQAM (2025), avec une application aux données de méthylation de l'ADN.
-
-L'objectif de cette application est de **rendre ces méthodes accessibles aux chercheurs non-statisticiens** via une interface interactive, sans nécessiter de programmation R avancée.
-
----
-## 🔗 Travaux liés
-
-Les méthodes CC et CNC implémentées dans cette application ont été développées 
-et validées dans le cadre du projet de recherche [`dna_mediation`](https://github.com/komiayi/dna_mediation), 
-qui présente l'application des méthodes à un jeu de données réelles 
-(traumatismes infantiles, méthylation de l'ADN, réactivité au cortisol).
-
-## ✨ Fonctionnalités actuelles
-
-* 🎯 **Estimation des effets de médiation par les méthodes CC et CNC** — 
-  uniquement implémentées dans cette application, à ma connaissance
-* 🔍 **Vérification automatisée des hypothèses** : normalité, indépendance, 
-  structure de corrélation des résidus
-* 📊 **Visualisations interactives** : diagrammes de corrélation, 
-  distributions, intervalles de confiance
-* 📥 **Importation flexible** : CSV, Excel, fichiers délimités
-* 📑 **Documentation contextuelle** intégrée dans chaque module
----
-
-## 🛠️ Technologies utilisées
-
-| Composant | Technologie |
-|-----------|-------------|
-| Langage principal | R (≥ 4.0) |
-| Framework web | Shiny |
-| Interface | HTML, CSS personnalisé |
-| Visualisation | ggplot2, plotly |
-| Calcul statistique | optim (en cours de migration vers Rcpp) |
-| Versionnage | Git / GitHub |
+<!--
+  Once a screenshot of the application interface is available,
+  uncomment the line below and place the file at docs/screenshot.png
+-->
+<!-- ![rbcm — application interface preview](docs/screenshot.png) -->
 
 ---
 
-## 🚧 En développement actif
+##  Overview
 
-L'optimisation de l'estimateur des paramètres CNC/CC fait actuellement l'objet d'un travail technique :
+`rbcm` is an R Shiny application implementing two parametric methods for the identification of natural direct and indirect effects in causal mediation analysis when mediators are **correlated but not causally linked** — that is, when their statistical association arises from an unmeasured common cause rather than from a direct causal pathway between them.
 
-- **Défi identifié** : la fonction d'optimisation `optim()` de R consomme une mémoire significative dans le contexte Shiny pour des matrices de haute dimension (typiquement > 100 000 paramètres).
-- **Approches évaluées** :
-  - Migration vers `nlminb()` ou `optimx::optimx()` pour une meilleure efficacité mémoire
-  - Réécriture de la fonction objectif en C++ via `Rcpp` pour des gains de performance significatifs
-  - Architecture asynchrone avec `future` + `promises` pour décharger le serveur Shiny
-  - Traitement par blocs (chunking) pour les matrices de très grande dimension
+The application provides two original estimation strategies:
 
-Voir [ROADMAP.md](ROADMAP.md) pour le détail des prochaines étapes.
+- **CC (Constant Correlation)** — a method that assumes a stable correlation structure between mediator residuals, simplifying effect identification.
+- **CNC (Non-Constant Correlation)** — a generalized parametric method that models residual correlation as a function of the exposure level, relaxing the often unrealistic constant-correlation assumption.
+
+Both methods were developed as part of my Master's thesis in Statistics at the Université du Québec à Montréal (2025), with an applied case study on DNA methylation and cortisol stress reactivity following childhood trauma.
+
+The objective of this application is to **make these methods accessible to applied researchers without requiring advanced R programming skills**, through an interactive interface that integrates data import, assumption checking, estimation, and visualization within a single workflow.
+
+---
+
+##  Related work
+
+The methodological foundations and a complete empirical application are documented in a companion repository:
+
+> **[`komiayi/dna_mediation`](https://github.com/komiayi/dna_mediation)** — research project applying the CC and CNC methods to a real-world dataset linking childhood trauma, DNA methylation (KITLG and JAZF1 loci), and cortisol stress reactivity.
+
+---
+
+## Current features
+
+-  **CC and CNC estimation of mediation effects** — a novel implementation made publicly available.
+-  **Automated assumption checks** — normality, independence, and residual correlation structure.
+-  **Interactive visualizations** — correlation diagrams, distribution plots, and confidence intervals.
+-  **Flexible data import** — CSV, Excel, and delimited file formats.
+-  **Contextual documentation** integrated within each module of the interface.
+
+---
+
+## ️ Technology stack
+
+| Component         | Technology                                          |
+| ----------------- | --------------------------------------------------- |
+| Core language     | R (≥ 4.0)                                           |
+| Web framework     | Shiny                                               |
+| Front-end         | HTML, custom CSS                                    |
+| Visualization     | ggplot2, plotly                                     |
+| Optimization      | `optim` (migration to Rcpp in progress)             |
+| Version control   | Git / GitHub                                        |
+
+---
+
+##  Active development
+
+Optimization of the CC and CNC estimators is currently the focus of ongoing technical work:
+
+- **Identified bottleneck.** R's `optim()` routine consumes substantial memory in a Shiny runtime context when applied to high-dimensional matrices (typically beyond 100 000 parameters).
+- **Approaches under evaluation:**
+  - Migrating the optimization layer to `nlminb()` or `optimx::optimx()` for improved memory efficiency.
+  - Rewriting the objective function in C++ via `Rcpp` for substantial performance gains.
+  - Adopting an asynchronous architecture with `future` and `promises` to offload heavy computations from the Shiny server.
+  - Implementing block-wise (chunked) processing for very large matrices.
+
+See [`ROADMAP.md`](ROADMAP.md) for the full technical roadmap.
 
 ---
 
 ## 🚀 Installation
 
-**1. Cloner le dépôt** (dans un terminal) :
+**1. Clone the repository** (from a terminal):
 
 ```bash
 git clone https://github.com/komiayi/rbcm.git
 cd rbcm
 ```
 
-**2. Installer les dépendances** (dans R / RStudio) :
+**2. Install the R dependencies** (within R or RStudio):
 
 ```r
 install.packages(c("shiny", "ggplot2", "plotly", "readxl", "DT"))
 ```
 
-**3. Lancer l'application** (dans R / RStudio) :
+**3. Launch the application** (within R or RStudio):
 
 ```r
 shiny::runApp()
@@ -90,43 +100,46 @@ shiny::runApp()
 
 ---
 
-## 📚 Références scientifiques
+##  References
 
-Les méthodes implémentées sont issues de mon mémoire de maîtrise :
+The methods implemented in this application are derived from my Master's thesis:
 
-> Ayi, K. R. (2025). *Analyse de médiation causale pour des médiateurs non 
-> causalement liés* [Mémoire de maîtrise, Université du Québec à Montréal]. 
-> Archipel UQAM. https://archipel.uqam.ca/19950
+> Ayi, K. R. (2025). *Analyse de médiation causale pour des médiateurs non causalement liés* [Causal mediation analysis for non-causally-linked mediators] [Master's thesis, Université du Québec à Montréal]. Archipel UQAM. https://archipel.uqam.ca/19950
 
-📄 [Télécharger le PDF complet](http://archipel.uqam.ca/19950/1/M19270.pdf)
+📄 [Download the full PDF](http://archipel.uqam.ca/19950/1/M19270.pdf)
 
-**Directeur de recherche :** Pr Karim Oualkacha, Département de mathématiques, UQAM.
+**Supervisor:** Prof. Karim Oualkacha, Department of Mathematics, UQAM.
 
-### Présentations associées
-- Colloque ESPUM — Méthodes Quantitatives en Santé (2025)
+### Associated presentations
+
+- ESPUM Symposium — Quantitative Methods in Health Research (2025)
 - Mediation Research Days, UQAM (2024)
-- Congrès SSC, Université Carleton, Ottawa (2023)
+- SSC Annual Meeting, Carleton University, Ottawa (2023)
 
 ---
 
-## 🤝 Contributions
+##  How to cite
 
-Le projet est en développement actif. Les retours, suggestions et issues sont les bienvenus via l'onglet [Issues](../../issues).
-
----
-
-## Licence
-
-Distribué sous licence MIT. Voir [`LICENSE`](LICENSE) pour les détails complets.
+If you use this software in academic or applied work, please cite both the software and the underlying thesis. A [`CITATION.cff`](CITATION.cff) file is provided at the root of the repository, enabling GitHub's *Cite this repository* feature (visible in the **About** panel) to generate citations automatically in APA, BibTeX, and other standard formats.
 
 ---
 
-## 👤 Auteur
+##  Contributing
 
-**Komi Roger Ayi**  
-Biostatisticien — Analyste de données en santé  
-Montréal, Québec  
-[LinkedIn](https://www.linkedin.com/in/komi-ayi) • [GitHub](https://github.com/komiayi) • [Portfolio](https://komiayi.github.io)
+This project is under active development. Feedback, methodological suggestions, and bug reports are welcome through the [Issues](https://github.com/komiayi/rbcm/issues) tab. For substantial contributions, please open an issue first to discuss the proposed changes.
 
 ---
-![Last commit](https://img.shields.io/github/last-commit/komiayi/rbcm)
+
+##  License
+
+Distributed under the MIT License. See [`LICENSE`](LICENSE) for the complete terms.
+
+---
+
+##  Author
+
+**Komi Roger Ayi**
+Biostatistician — Health Data Analyst
+Montréal, Québec, Canada
+
+[Portfolio](https://komiayi.github.io) · [LinkedIn](https://www.linkedin.com/in/komi-ayi) · [GitHub](https://github.com/komiayi)
