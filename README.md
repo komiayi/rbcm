@@ -15,7 +15,7 @@
 - **CC (Constant Correlation)** — méthode adaptée lorsque la structure de corrélation entre médiateurs est stable
 - **CNC (Non-Constant Correlation)** — méthode généralisée pour les structures de corrélation hétérogènes
 
-Ces méthodes ont été développées dans le cadre de mon mémoire de maîtrise en statistique à l'UQAM (2026), avec une application aux données de méthylation de l'ADN.
+Ces méthodes ont été développées dans le cadre de mon mémoire de maîtrise en statistique à l'UQAM (2025), avec une application aux données de méthylation de l'ADN.
 
 L'objectif de cette application est de **rendre ces méthodes accessibles aux chercheurs non-statisticiens** via une interface interactive, sans nécessiter de programmation R avancée.
 
