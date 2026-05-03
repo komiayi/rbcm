@@ -7,7 +7,7 @@
 [![Shiny](https://img.shields.io/badge/Shiny-app-brightgreen)]()
 
 ---
-
+![Aperçu de l'application rbcm](docs/screenshot.png)
 ## 📖 Description
 
 `rbcm` est une application R Shiny implémentant deux méthodes paramétriques originales pour l'identification des effets de médiation causale lorsque les médiateurs sont corrélés :
@@ -61,15 +61,22 @@ Voir [ROADMAP.md](ROADMAP.md) pour le détail des prochaines étapes.
 
 ## 🚀 Installation
 
-```r
-# Cloner le dépôt
+**1. Cloner le dépôt** (dans un terminal) :
+
+```bash
 git clone https://github.com/komiayi/rbcm.git
 cd rbcm
+```
 
-# Installer les dépendances R
+**2. Installer les dépendances** (dans R / RStudio) :
+
+```r
 install.packages(c("shiny", "ggplot2", "plotly", "readxl", "DT"))
+```
 
-# Lancer l'application
+**3. Lancer l'application** (dans R / RStudio) :
+
+```r
 shiny::runApp()
 ```
 
@@ -104,7 +111,7 @@ Distribué sous licence MIT. Voir [`LICENSE`](LICENSE) pour les détails complet
 **Komi Roger Ayi**  
 Biostatisticien — Analyste de données en santé  
 Montréal, Québec  
-[LinkedIn](#) • [GitHub](https://github.com/komiayi)
+[LinkedIn](https://www.linkedin.com/in/komi-ayi) • [GitHub](https://github.com/komiayi) • [Portfolio](https://komiayi.github.io)
 
 ---
 
