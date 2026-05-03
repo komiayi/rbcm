@@ -26,14 +26,17 @@ Les méthodes CC et CNC implémentées dans cette application ont été dévelop
 et validées dans le cadre du projet de recherche [`dna_mediation`](https://github.com/komiayi/dna_mediation), 
 qui présente l'application des méthodes à un jeu de données réelles 
 (traumatismes infantiles, méthylation de l'ADN, réactivité au cortisol).
+
 ## ✨ Fonctionnalités actuelles
 
-- 📥 **Importation de données** : support des formats CSV, Excel et fichiers délimités
-- 🔍 **Vérification des hypothèses statistiques** : tests de normalité, indépendance, structure de corrélation
-- 📊 **Visualisation interactive** : graphiques dynamiques des corrélations et des distributions
-- 🎨 **Interface utilisateur** : design CSS personnalisé pour une expérience fluide
-- 📑 **Documentation intégrée** : guides contextuels pour chaque module
-
+* 🎯 **Estimation des effets de médiation par les méthodes CC et CNC** — 
+  uniquement implémentées dans cette application, à ma connaissance
+* 🔍 **Vérification automatisée des hypothèses** : normalité, indépendance, 
+  structure de corrélation des résidus
+* 📊 **Visualisations interactives** : diagrammes de corrélation, 
+  distributions, intervalles de confiance
+* 📥 **Importation flexible** : CSV, Excel, fichiers délimités
+* 📑 **Documentation contextuelle** intégrée dans chaque module
 ---
 
 ## 🛠️ Technologies utilisées
@@ -119,5 +122,4 @@ Montréal, Québec
 [LinkedIn](https://www.linkedin.com/in/komi-ayi) • [GitHub](https://github.com/komiayi) • [Portfolio](https://komiayi.github.io)
 
 ---
-
-*Dernière mise à jour : avril 2026*
+![Last commit](https://img.shields.io/github/last-commit/komiayi/rbcm)
