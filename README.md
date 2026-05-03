@@ -92,13 +92,20 @@ shiny::runApp()
 
 ## 📚 Références scientifiques
 
-Méthodes implémentées issues de mes travaux de maîtrise :
+Les méthodes implémentées sont issues de mon mémoire de maîtrise :
 
-- **Komi Roger Ayi** (2026). *Méthodes paramétriques d'analyse de médiation causale en présence de médiateurs corrélés*. Mémoire de maîtrise, Université du Québec à Montréal.
-- Présentations associées :
-  - Colloque ESPUM — Méthodes Quantitatives en Santé (2025)
-  - Mediation Research Days, UQAM (2024)
-  - Congrès SSC, Université Carleton, Ottawa (2023)
+> Ayi, K. R. (2025). *Analyse de médiation causale pour des médiateurs non 
+> causalement liés* [Mémoire de maîtrise, Université du Québec à Montréal]. 
+> Archipel UQAM. https://archipel.uqam.ca/19950
+
+📄 [Télécharger le PDF complet](http://archipel.uqam.ca/19950/1/M19270.pdf)
+
+**Directeur de recherche :** Pr Karim Oualkacha, Département de mathématiques, UQAM.
+
+### Présentations associées
+- Colloque ESPUM — Méthodes Quantitatives en Santé (2025)
+- Mediation Research Days, UQAM (2024)
+- Congrès SSC, Université Carleton, Ottawa (2023)
 
 ---
 
