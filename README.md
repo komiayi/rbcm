@@ -108,7 +108,7 @@ The methods implemented in this application are derived from my Master's thesis:
 
 📄 [Download the full PDF](http://archipel.uqam.ca/19950/1/M19270.pdf)
 
-**Supervisor:** Prof. Karim Oualkacha, Department of Mathematics, UQAM.
+** Supervision:** Prof. Karim Oualkacha (Department of Mathematics, UQAM) and Prof. Geneviève Lefebvre (Department of Mathematics, UQAM).
 
 ### Associated presentations
 
