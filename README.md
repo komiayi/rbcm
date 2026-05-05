@@ -77,7 +77,7 @@ See [`ROADMAP.md`](ROADMAP.md) for the full technical roadmap.
 
 ---
 
-## 🚀 Installation
+## Installation
 
 **1. Clone the repository** (from a terminal):
 
@@ -106,9 +106,9 @@ The methods implemented in this application are derived from my Master's thesis:
 
 > Ayi, K. R. (2025). *Analyse de médiation causale pour des médiateurs non causalement liés* [Causal mediation analysis for non-causally-linked mediators] [Master's thesis, Université du Québec à Montréal]. Archipel UQAM. https://archipel.uqam.ca/19950
 
-📄 [Download the full PDF](http://archipel.uqam.ca/19950/1/M19270.pdf)
+ [Download the full PDF](http://archipel.uqam.ca/19950/1/M19270.pdf)
 
-** Supervision:** Prof. Karim Oualkacha (Department of Mathematics, UQAM) and Prof. Geneviève Lefebvre (Department of Mathematics, UQAM).
+**Supervision:** Prof. Karim Oualkacha (Department of Mathematics, UQAM) and Prof. Geneviève Lefebvre (Department of Mathematics, UQAM).
 
 ### Associated presentations
 
