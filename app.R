@@ -25,7 +25,7 @@ for (f in list.files("R", pattern = "\\.R$", full.names = TRUE)) {
 ##############################################################
 
 # Set Up UI Components
-header <- dashboardHeader(title = "Rbcm", 
+header <- dashboardHeader(title = "rbcm", 
                           titleWidth = 200) 
 
 sidebar <- dashboardSidebar(
@@ -41,10 +41,10 @@ sidebar <- dashboardSidebar(
     ),
     
     menuItem("Causal mediation", tabName = "mediate", icon = icon("diagram-project")),
-    menuItem("External Link", href = "https://github.com/komiayi/dna_mediation/blob/main/docs/document_final.pdf", icon = icon("external-link")),
+    menuItem("External Link", href = "https://archipel.uqam.ca/19950/", icon = icon("external-link"))#,
     
     # Search Form: For enhanced user interaction
-    sidebarSearchForm(textId = "search", buttonId = "searchButton", label = "Search...")
+    #sidebarSearchForm(textId = "search", buttonId = "searchButton", label = "Search...")
   )
 )
 
@@ -109,7 +109,7 @@ body <- dashboardBody(
             ),
             br(),
             fluidRow(
-              column(3, numericInput("B", "Number of Bootstrap Resamples", value = 20)),
+              column(3, numericInput("B", "Number of Bootstrap Resamples", value = 150)),
               column(6, radioButtons("interaction", "Interaction terms in the outcome model ?", 
                                      choices = list("Yes" = TRUE, "No" = FALSE), selected = FALSE)),
               
@@ -190,7 +190,7 @@ body <- dashboardBody(
     ),
     tabItem(tabName = "mediate",
             div(class = "d-flex justify-content-between align-items-center mb-4",
-                h2(tags$i(class = "fas fa-chart-line me-2"), "Mediations results")
+                h2("Mediations results")
             ),
             fluidRow(
               column(width = 12,
@@ -202,17 +202,18 @@ body <- dashboardBody(
                            id = "mediation_tabs",
                            nav_panel(
                              title = "Constant correlation (CC)",
+                             #DT::dataTableOutput("table_results_cc")
                              div(class = "p-3",
                                  hr(),
                                  layout_column_wrap(
-                                   width = 1/3, 
+                                   width = 1/3,
                                    heights_equal = "row",
-                                   
+
                                    # direct
                                    card(
                                      card_header(
                                        div(class = "d-flex justify-content-center align-items-center",
-                                           tags$b(withMathJax("\\(\\hat{\\rho}(0,1)\\)"))
+                                           tags$b(withMathJax("\\(\\hat{\\rho}\\)"))
                                        )
                                      ),
                                      uiOutput("cc_rho")
@@ -240,7 +241,7 @@ body <- dashboardBody(
                              )
                            ),
                            nav_panel(
-                             title = "Non constant correlation (CNC)",
+                             title = "Non-constant correlation (CNC)",
                              div(class = "p-3",
                                  hr(),
                                  layout_column_wrap(
@@ -412,6 +413,7 @@ server <- function(input, output, session) {
       intmed_cov = clean_input(input$intmed_cov),
       sed_cov = clean_input(input$sed_cov),
       interactions = input$interaction,
+      inters = input$interaction_types,
       all = unique(c(input$outcome, input$treat, input$mediators, 
                      clean_input(input$out_cov), clean_input(input$intmed_cov), 
                      clean_input(input$sed_cov)))
@@ -431,7 +433,7 @@ server <- function(input, output, session) {
     covariate <- unique(c(intmed_cov_vars, sed_cov_vars))
     
     inter <- as.logical(selected_vars_list()$interactions)
-    selected_interactions <- input$interaction_types
+    selected_interactions <- selected_vars_list()$inters
     interaction_terms <- c()
     
     if (isTRUE(inter) && !is.null(selected_interactions)) {
@@ -680,9 +682,8 @@ server <- function(input, output, session) {
   
   output$Multivariatenorm <- renderText({selected_vars_list()$mediators})
   
-  ####### Corrélation constante
+  ####### Constant correlation
   
-
   resultsCC <- eventReactive(input$run, {
     req(data(), selected_vars_list())
     
@@ -696,7 +697,7 @@ server <- function(input, output, session) {
     
     Br <- input$B
     inter <- as.logical(vars$interactions)
-    selected_interactions <- input$interaction_types
+    selected_interactions <- selected_vars_list()$inters
     cor_cste <- 1
     rh <- 0.5
     
@@ -755,11 +756,13 @@ server <- function(input, output, session) {
         intmed_cov = intmed_cov_vars, sed_cov = sed_cov_vars, inter = inter, ro = r011,
         corC = cor_coefs, names_vec = names_vec, cor_cste = cor_cste, data = current_data
       )
-      return(c(DE = sol$DE1sk, IE = sol$IE1sk))
+      return(list(res = c(sol$DE1sk,sol$IE1sk), rho = r011))
     }
     
     # 5. Calcul sur les données réelles
-    SolVrai <- run_analysis_core(data())
+    vrai_obj <- run_analysis_core(data())
+    SolVrai  <- vrai_obj$res
+    RhosVrai <- vrai_obj$rho
     
     #6. Bootstrap (Vectorisé)
     set.seed(145)
@@ -779,51 +782,96 @@ server <- function(input, output, session) {
     biais_bootstrap <- boot_means - SolVrai
     
     tibble::tibble(
-      Effect = c("Direct Effect", "Indirect Effect"),
+      Effect = c("Direct", "Indirect"),
       Estimate = round(SolVrai, 2),
       StdError = round(sqrt(SolBi), 2),
+      rho    = rep(round(RhosVrai, 2), 2),
       BiasBoost = round(biais_bootstrap,2),
       `95% CI` = paste0("[", round(SolBcant[1, ], 2), ", ", round(SolBcant[2, ], 2), "]")
     )
   })
   
-  output$table_results_cc <- renderDataTable({
-    df <- resultsCC()
-
-    datatable(df, 
-              caption = "Direct and Indirect Effects via Causal Categorical approach",
-              options = list(dom = 't',
-                             columnDefs = list(list(className = 'dt-center', targets = "_all"))),
-              selection = 'none') %>%
-      formatStyle('Effect', fontWeight = 'bold') 
+  # output$table_results_cc <- renderDataTable({
+  #   df <- resultsCC()
+  # 
+  #   datatable(df, 
+  #             caption = "Direct and Indirect Effects via Causal Categorical approach",
+  #             options = list(dom = 't',
+  #                            columnDefs = list(list(className = 'dt-center', targets = "_all"))),
+  #             selection = 'none') %>%
+  #     formatStyle('Effect', fontWeight = 'bold') 
+  # })
+  render_cc_boxes <- function(df, effect_name, color_theme) {
+    row_data <- df[df$Effect == effect_name, ]
+    if (nrow(row_data) == 0) return(NULL)
+    
+    layout_column_wrap(
+      width = "250px", 
+      fixed_width = TRUE,
+      gap = "1.5rem", 
+      value_box(
+        title = "",
+        value = NULL,
+        theme = color_theme,
+        showcase = span(
+          format(round(as.numeric(row_data$Estimate[1]), 2), nsmall = 2), 
+          style = "font-size: 4.01rem; font-weight: bold;"
+        ),
+        showcase_layout = showcase_left_center(),
+        
+        tags$div(
+          tags$div(
+            class = "d-flex",
+            style = "font-size: 1.55rem;",
+            tags$span(tags$b("Bias:"), format(row_data$BiasBoost[1], nsmall = 3),", "),
+            tags$span(tags$b("SE:"), format(row_data$StdError[1], nsmall = 2))
+          ),
+          tags$div(
+            style = "font-size: 1.31rem;",
+            tags$b("95% CI: "), row_data$`95% CI`[1]
+          )
+        )
+      )
+    )
+  }
+  
+  render_rho_cc <- function(df) {
+    df_sub <- df
+    layout_column_wrap(
+      width = "250px", 
+      fixed_width = TRUE,
+      gap = "1.5rem",
+      value_box(
+        title = "",
+        value = NULL,
+        showcase = span(
+          format(round(as.numeric(df_sub$rho[1]), 2), nsmall = 2), 
+          style = "font-size: 3.95rem;" 
+        ),
+        showcase_layout = showcase_left_center(),
+        theme = "primary",
+        br(),
+        br()
+      )
+    )
+  }
+  
+  output$cc_rho <- renderUI({
+    req(resultsCC())
+    render_rho_cc(resultsCC())
   })
   
-  # # 1. Valeur Effet Direct
-  # output$cc_direct_val <- renderText({
-  #   df <- resultsCC()
-  #   # On récupère l'estimate de la première ligne (ajustez l'index selon votre df)
-  #   round(df$Estimate[1], 3)
-  # })
-  # 
-  # # 2. CI Effet Direct
-  # output$cc_direct_ci <- renderText({
-  #   df <- resultsCC()
-  #   paste("CI 95%:", df$CI[1])
-  # })
-  # 
-  # # 3. Valeur Effet Indirect
-  # output$cc_indirect_val <- renderText({
-  #   df <- resultsCC()
-  #   # On récupère l'estimate de l'effet indirect (ex: ligne 7)
-  #   round(df$Estimate[7], 3)
-  # })
-  # 
-  # # 4. CI Effet Indirect
-  # output$cc_indirect_ci <- renderText({
-  #   df <- resultsCC()
-  #   paste("CI 95%:", df$CI[7])
-  # })
+  output$cc_direct_grid <- renderUI({
+    req(resultsCC())
+    render_cc_boxes(resultsCC(), "Direct", "info")
+  })
   
+  output$cc_indirect_grid <- renderUI({
+    req(resultsCC())
+    render_cc_boxes(resultsCC(), "Indirect", "info")
+  })
+  
+  ####### Non-constant correlation
   
   resultsCNC <- eventReactive(input$run, {
     req(data(), selected_vars_list())
@@ -838,7 +886,7 @@ server <- function(input, output, session) {
     
     Br <- input$B
     inter <- as.logical(vars$interactions)
-    selected_interactions <- input$interaction_types
+    selected_interactions <- selected_vars_list()$inters
     cor_cste <- 3
     rh <- 0.5
     
@@ -902,7 +950,6 @@ server <- function(input, output, session) {
         intmed_cov = intmed_cov_vars, sed_cov = sed_cov_vars, inter = inter, ro = r011,
         corC = cor_coefs, names_vec = names_vec, cor_cste = cor_cste, data = current_data
       )
-
       return(list(res = c(sol$DE1sk, sol$IE1sk), rho = r011))
     }
     
@@ -913,12 +960,12 @@ server <- function(input, output, session) {
     set.seed(145)
     boot_list <- lapply(1:Br, function(i) {
       sample_data <- data()[sample(nrow(data()), replace = TRUE), ]
-      res_boot <- run_analysis_core(sample_data)$res
+      dw <- run_analysis_core(sample_data)
+      res_boot <- dw$res
       return(as.numeric(res_boot)) 
     })
 
     SolB <- do.call(rbind, boot_list) 
-    
     SolBi <- apply(SolB, 2, var, na.rm = TRUE)
     SolBcant <- apply(SolB, 2, quantile, probs = c(0.025, 0.975), na.rm = TRUE)
     
@@ -947,9 +994,11 @@ server <- function(input, output, session) {
     input$B
   })
   
-  
-  render_cnc_boxes <- function(df, effect_name, color_theme) {
+  render_cnc_boxes <- function(df, effect_name, color_theme, has_interaction) {
     df_sub <- df[grepl(effect_name, df$Effect), ]
+    if (!isTRUE(has_interaction)) {
+      df_sub <- df_sub[df_sub$Method == "CNCm", ]
+    }
     
     layout_column_wrap(
       width = "250px",
@@ -958,10 +1007,14 @@ server <- function(input, output, session) {
       lapply(1:nrow(df_sub), function(i) {
         is_mean <- df_sub$Method[i] == "CNCm"
         value_box(
-          title = df_sub$Method[i],
-          value = span(format(round(as.numeric(df_sub$Estimate[i]), 3), nsmall = 2), 
-                       style = "font-size: 4.01rem;"),
+          title = "",
+          value = NULL,
           theme = if(is_mean) color_theme else "light",
+          showcase = span(
+            format(round(as.numeric(df_sub$Estimate[i]), 3), nsmall = 2), 
+            style = "font-size: 4.01rem; font-weight: bold;"
+          ),
+          showcase_layout = showcase_left_center(),
           
           tags$div(
             #style = "font-size: 0.85rem; line-height: 1.4;",
@@ -982,60 +1035,67 @@ server <- function(input, output, session) {
   }
   
   output$cnc_direct_grid <- renderUI({
+    vars <- selected_vars_list()
+    inter_active <- as.logical(vars$interactions)
     req(resultsCNC())
-    render_cnc_boxes(resultsCNC(), "Direct", "primary")
+    render_cnc_boxes(resultsCNC(), "Direct", "info", inter_active)
   })
   
   output$cnc_indirect_grid <- renderUI({
+    vars <- selected_vars_list()
+    inter_active <- as.logical(vars$interactions)
     req(resultsCNC())
-    render_cnc_boxes(resultsCNC(), "Indirect", "info") 
+    render_cnc_boxes(resultsCNC(), "Indirect", "info", inter_active) 
   })
   
-  render_rho_params <- function(df) {
+  render_rho_params <- function(df, has_interaction) {
     df_sub <- df[df$Effect == "Indirect Effect", ]
+    if (!isTRUE(has_interaction)) {
+      df_sub <- df_sub[df_sub$Method == "CNCm", ]
+    }
     
     layout_column_wrap(
       width = "250px", 
       fixed_width = TRUE,
       gap = "1.5rem",
-      
+
       lapply(1:nrow(df_sub), function(i) {
         is_mean <- df_sub$Method[i] == "CNCm"
-        
+        root_num <- gsub("CNCr", "", df_sub$Method[i])
         value_box(
-          title = df_sub$Method[i],
-          value = span(format(round(as.numeric(df_sub$rho[i]), 2), nsmall = 2), 
-                       style = "font-size: 3.95rem;"),
+          title = "",
+          value = NULL,
+          showcase = span(
+            format(round(as.numeric(df_sub$rho[i]), 2), nsmall = 2), 
+            style = "font-size: 3.95rem;" # Ta taille d'origine
+          ),
+          showcase_layout = showcase_left_center(),
+          
           theme = if(is_mean) "primary" else "secondary",
-          br(),
-          br(),
-          br()
+      
+          tags$div(
+            style = "font-size: 0.9rem; line-height: 1.2;",
+            if(is_mean) {
+              list(withMathJax("\\((\\hat{\\rho}(0,0) + \\hat{\\rho}(1,1))/2\\)"), tags$br(), tags$br(), tags$br(), tags$br())
+            } else {
+              list(
+                tags$b("Root analytical"), tags$br(),
+                withMathJax(paste0("\\(\\hat{\\rho}(0,1)_{", root_num, "}\\)")),
+                tags$br(), tags$br(), tags$br()
+              )
+            }
+          )
         )
       })
     )
   }
  
   output$rho <- renderUI({
+    vars <- selected_vars_list()
+    inter_active <- as.logical(vars$interactions)
     req(resultsCNC())
-    render_rho_params(resultsCNC()) 
+    render_rho_params(resultsCNC(), inter_active) 
   })
-  
-  
-  output$cc_rho <- renderUI({
-    req(resultsCC())
-    render_rho_params(resultsCC()) 
-  })
-  
-  output$cc_direct_grid <- renderUI({
-    req(resultsCC())
-    render_cc_boxes(resultsCC(), "Direct", "primary")
-  })
-  
-  output$cc_indirect_grid <- renderUI({
-    req(resultsCC())
-    render_cc_boxes(resultsCC(), "Indirect", "info") 
-  })
-  
   
 }
 
